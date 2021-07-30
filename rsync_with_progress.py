@@ -2,11 +2,40 @@ import subprocess
 import re
 import sys
 
+try:
+	try:
+		import tkMessageBox as messagebox
+	except ModuleNotFoundError:
+		# Python 3
+		try:
+			from tkinter import messagebox
+		except ModuleNotFoundError:
+			raise Exception("You must install the python3-tk package"
+							" such as via:\n"
+							"  sudo apt-get install python3-tk")
+			exit(1)
+except NameError as ex:
+	if "ModuleNotFoundError" in str(ex):
+		# There is no ModuleNotFoundError in Python 2, so trying to
+		# use it will raise a NameError.
+		raise Exception("You are using Python 2"
+			            " but this program requires Python 3.")
+	else:
+		raise ex
+
 print('Dry run:')
 
+try:
+	in_folder = sys.argv[1]
+	out_folder = sys.argv[2]
+except IndexError:
+	clause = ", but there were none."
+	if len(sys.argv) > 1:
+		clause = ", but there was only {}".format(sys.argv[1:])
+	messagebox.showerror("Error", ("There must be both a source and"
+						           " a destination parameter"+clause))
+	exit(1)
 
-in_folder = sys.argv[1]
-out_folder = sys.argv[2]
 
 cmd = 'rsync -az --stats --dry-run ' + in_folder + ' ' + out_folder
 
