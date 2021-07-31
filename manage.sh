@@ -46,7 +46,7 @@ if [ "@$HOSTNAME" = "@linuxtower" ]; then
             fi
             xmessage -buttons Ok:0 -default Ok -nearmouse "Installing settings succeeded. Press OK to run BackupNow."
             chmod +x /home/maria/Projects/BackupNow/BackupNow.sh
-            /home/maria/Projects/BackupNow/BackupNow.sh
+            /home/maria/Projects/BackupNow/BackupNow.sh --no-management
             exit 0
             # ^ signal to BackupNow.sh that this operation ran a backup and that it (version that called this script) doesn't run it
             #   nor cause infinite recursion!
@@ -66,7 +66,8 @@ if [ "@$HOSTNAME" = "@linuxtower" ]; then
             fi
             xmessage -buttons Ok:0 -default Ok -nearmouse "Installing settings succeeded. Press OK to run BackupNow."
             chmod +x /home/maria/Projects/BackupNow/BackupNow.sh
-            /home/maria/Projects/BackupNow/BackupNow.sh
+            export UPDATE=false
+            /home/maria/Projects/BackupNow/BackupNow.sh --no-management
             exit 0
             # ^ signal to BackupNow.sh that this operation ran a backup and that it (version that called this script) doesn't run it
             #   nor cause infinite recursion!
