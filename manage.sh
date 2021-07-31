@@ -17,7 +17,7 @@ customExit(){
 }
 
 if [ "@$HOSTNAME" = "@linuxtower" ]; then
-    if [ "$USER" = "maria" ]; then
+    if [ "@$USER" = "@maria" ]; then
         mkdir -p ~/git
         code=$?
         if [ $code -ne 0 ]; then
@@ -66,19 +66,20 @@ if [ "@$HOSTNAME" = "@linuxtower" ]; then
             chmod +x /home/maria/Projects/BackupNow/BackupNow.sh
             /home/maria/Projects/BackupNow/BackupNow.sh
             exit 0
+            # ^ signal to BackupNow.sh that this operation ran a backup and that it (version that called this script) doesn't run it
+            #   nor cause infinite recursion!
         fi
         #if [ $? -ne 0 ]; then
-    #    xmessage -buttons Ok:0 -default Ok -nearmouse "Error: backup $DST_PROFILE/Documents failed. Try re-inserting $targetvol."
-      #( speaker-test -t sine -f 1000 )& pid=$! ; sleep 0.25s ; kill -9 $pid
-      #( speaker-test -t sine -f 1000 )& pid=$! ; sleep 0.25s ; kill -9 $pid
-      #( speaker-test -t sine -f 1000 )& pid=$! ; sleep 0.25s ; kill -9 $pid
-        exit 1
+        #    xmessage -buttons Ok:0 -default Ok -nearmouse "Error: backup $DST_PROFILE/Documents failed. Try re-inserting $targetvol."
+        #    ( speaker-test -t sine -f 1000 )& pid=$! ; sleep 0.25s ; kill -9 $pid
+        #    ( speaker-test -t sine -f 1000 )& pid=$! ; sleep 0.25s ; kill -9 $pid
+        #    ( speaker-test -t sine -f 1000 )& pid=$! ; sleep 0.25s ; kill -9 $pid
+        #    exit 1
+        #fi
     fi
-#fi
-xmessage -buttons Ok:0 -default Ok -nearmouse "The backup completed successfully."
 
 fi
-
+customExit "Info: There are no actions for $USER at $HOSTNAME." 1
 exit 1
 # ^ Return non-zero to signal the
 #   [bash version of BackupNow](https://raw.githubusercontent.com/poikilos/preinstall-linuxtower-maria/main/always_add/home/maria/Projects/BackupNow/BackupNow.sh)
