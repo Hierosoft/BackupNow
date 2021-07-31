@@ -87,11 +87,14 @@ class RSync:
             sizeFlagI = -1
             
             if (error is not None) and (len(error) > 0):
-                self.changed(
-                    None,
-                    error="{}".format(error.strip())
-                )
-                return False
+                if 'skipping non-regular file' in error:
+                    pass
+                else:
+                    self.changed(
+                        None,
+                        error="{}".format(error.strip())
+                    )
+                    return False
 
             if output is None:
                 return False
