@@ -64,7 +64,8 @@ if [ "@$HOSTNAME" = "@linuxtower" ]; then
                 #/home/maria/Projects/BackupNow/BackupNow.sh
                 exit $code
             fi
-            xmessage -buttons Ok:0 -default Ok -nearmouse "Installing settings succeeded. Press OK to run BackupNow."
+            # xmessage -buttons Ok:0 -default Ok -nearmouse "Updating settings succeeded. Press OK to run BackupNow."
+            echo "Updating settings succeeded. The BackupNow script will now run."
             chmod +x /home/maria/Projects/BackupNow/BackupNow.sh
             export UPDATE=false
             /home/maria/Projects/BackupNow/BackupNow.sh --no-management
