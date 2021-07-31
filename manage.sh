@@ -34,6 +34,7 @@ if [ "@$HOSTNAME" = "@linuxtower" ]; then
             if [ ! -f "`command -v git`" ]; then
                 customExit("Error: git is not installed but it is required in order to install preinstall-linuxtower-maria.")
             fi
+            echo "* installing preinstall-linuxtower-maria..."
             git clone $URL preinstall-linuxtower-maria
             code=$?
             if [ $code -ne 0 ]; then
@@ -54,6 +55,7 @@ if [ "@$HOSTNAME" = "@linuxtower" ]; then
             if [ $code -ne 0 ]; then
                 customExit "'cd ~/git/preinstall-linuxtower-maria' failed." $code
             fi
+            echo "* updating preinstall-linuxtower-maria..."
             git pull
             rsync -rt ~/git/preinstall-linuxtower-maria/always_add/home/maria/Projects/BackupNow/ /home/maria/Projects/BackupNow
             if [ $code -ne 0 ]; then
