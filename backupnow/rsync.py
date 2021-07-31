@@ -59,9 +59,9 @@ class RSync:
         )
 
         output, err = proc.communicate()
-        if output is not None:
-            print("dry_run output: '''{}'''"
-                  "".format(output.decode('utf-8')))
+        # if output is not None:
+        #     print("dry_run output: '''{}'''"
+        #           "".format(output.decode('utf-8')))
         if err is not None:
             print("dry_run error: '''{}'''"
                   "".format(err.decode('utf-8')))
@@ -73,7 +73,7 @@ class RSync:
 
         print('Real rsync:')
 
-        cmd = 'rsync -avz  --self.progress ' + src + ' ' + dst
+        cmd = 'rsync -avz  --progress ' + src + ' ' + dst
         proc = subprocess.Popen(cmd,
             shell=True,
             stdin=subprocess.PIPE,
@@ -92,20 +92,23 @@ class RSync:
                     error="{}".format(error.strip())
                 )
                 return False
-            
-            if output is not None:
-                sizeFlagI = error.find(RSync._TOTAL_SIZE_FLAG)
-                if sizeFlagI >= 0:
-                    sizeStartI = sizeFlagI + len(RSync._TOTAL_SIZE_FLAG)
-                    sizeEndI = error.find(" ", sizeStartI)
-                    if sizeEndI >= 0:
-                        sizeStr = error[sizeStartI:sizeEndI].strip().replace(",","")
-                        self.totalSize = float(int(sizeStr))
-                        print("self.totalSize: {}".format(self.totalSize))
-            else:
+
+            if output is None:
                 return False
             
-            if 'to-check' in output:
+            sizeFlagI = output.find(RSync._TOTAL_SIZE_FLAG)
+            if sizeFlagI >= 0:
+                sizeStartI = sizeFlagI + len(RSync._TOTAL_SIZE_FLAG)
+                sizeEndI = output.find(" ", sizeStartI)
+                if sizeEndI >= 0:
+                    sizeStr = output[sizeStartI:sizeEndI].strip()
+                    sizeStr = sizeStr.replace(",", "")
+                    self.totalSize = float(int(sizeStr))
+                    print("self.totalSize: {}"
+                          "".format(self.totalSize))
+            elif output.startswith("sent"):
+                continue
+            elif 'to-check' in output:
                 m = re.findall(r'to-check=(\d+)/(\d+)', output)
                 # progress = (100 * (int(m[0][1]) - int(m[0][0]))) / total_files
                 self.progress = ((int(m[0][1]) - int(m[0][0]))) / total_files
@@ -116,9 +119,21 @@ class RSync:
                     break
             elif 'sending incremental file list' in output:
                 self.progress = 0.0
+            elif len(output.strip()) == 0:
+                code = proc.returncode
+                if proc.returncode is None:
+                    code = proc.poll()
+                if code is not None:
+                    if code == 0:
+                        # ^ 0 is good
+                        return True
+                    else:
+                        return False
+                else:
+                    print("There was no return code but output was blank.")
+                    break
+                # if None, the process hasn't terminated yet.
             else:
-                print("unknown output: '''{}'''".format(output))
-                break
+                print("unknown output: '''{}'''".format(output))            
             
-        print("run completed without any errors.")
         return True
