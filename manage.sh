@@ -32,7 +32,7 @@ if [ "@$HOSTNAME" = "@linuxtower" ]; then
             # wget -O ~/Projects/BackupNow/BackupNow.sh "$URL"
             URL="https://github.com/poikilos/preinstall-linuxtower-maria.git"
             if [ ! -f "`command -v git`" ]; then
-                customExit("Error: git is not installed but it is required in order to install preinstall-linuxtower-maria.")
+                customExit "Error: git is not installed but it is required in order to install preinstall-linuxtower-maria."
             fi
             echo "* installing preinstall-linuxtower-maria..."
             git clone $URL preinstall-linuxtower-maria
