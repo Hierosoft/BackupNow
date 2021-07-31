@@ -10,39 +10,47 @@ try:
         try:
             from tkinter import messagebox
         except ModuleNotFoundError:
-            raise Exception("You must install the python3-tk package"
-                            " such as via:\n"
+            raise Exception("The rsync module requires the python3-tk"
+                            " package to be installed such as via:\n"
                             "  sudo apt-get install python3-tk")
             exit(1)
-    except NameError as ex:
+except NameError as ex:
     if "ModuleNotFoundError" in str(ex):
         # There is no ModuleNotFoundError in Python 2, so trying to
         # use it will raise a NameError.
         raise Exception("You are using Python 2"
-                        " but this program requires Python 3.")
+                        " but the rsync module requires Python 3.")
     else:
         raise ex
-class Rsync:
-    def __init__(self):
-        pass
+
+
+class RSync:
+    _TOTAL_SIZE_FLAG = 'total size is '
     
-    def run(src, dst, exclude_from=None, include_from=None,
-            exclude_from=None):
+    def __init__(self):
+        self._reset()
+    
+    def _reset(self):
+        self.progress = 0.0  # The progress from 0.0 to 1.0
+        self.totalSize = sys.float_info.max
+
+    def changed(self, progress, message=None, error=None):
+        print("Your program should overload this function."
+              " It accepts a value from 0.0 to 1.0, and optionally,"
+              " a message and an error:\n"
+              "changed({}, message=\"{}\", error=\"{}\")"
+              "".format(progress, message, error))
+    
+    def run(self, src, dst, exclude_from=None, include_from=None,
+            exclude=None, include=None):
+        '''
+        dst -- This is the backup destination. The folder name of src
+               (but not the full path) will be added under dst.
+        '''
+
         print('Dry run:')
 
-        try:
-            in_folder = sys.argv[1]
-            out_folder = sys.argv[2]
-        except IndexError:
-            clause = ", but there were none."
-            if len(sys.argv) > 1:
-                clause = ", but there was only {}".format(sys.argv[1:])
-            messagebox.showerror("Error", ("There must be both a source and"
-                                           " a destination parameter"+clause))
-            exit(1)
-
-
-        cmd = 'rsync -az --stats --dry-run ' + in_folder + ' ' + out_folder
+        cmd = 'rsync -az --stats --dry-run ' + src + ' ' + dst
 
         proc = subprocess.Popen(cmd,
             shell=True,
@@ -51,6 +59,12 @@ class Rsync:
         )
 
         output, err = proc.communicate()
+        if output is not None:
+            print("dry_run output: '''{}'''"
+                  "".format(output.decode('utf-8')))
+        if err is not None:
+            print("dry_run error: '''{}'''"
+                  "".format(err.decode('utf-8')))
 
         mn = re.findall(r'Number of files: (\d+)', output.decode('utf-8'))
         total_files = int(mn[0])
@@ -59,21 +73,52 @@ class Rsync:
 
         print('Real rsync:')
 
-        cmd = 'rsync -avz  --progress ' + in_folder + ' ' + out_folder
+        cmd = 'rsync -avz  --self.progress ' + src + ' ' + dst
         proc = subprocess.Popen(cmd,
             shell=True,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
-
+        self._reset()
         while True:
             output = proc.stdout.readline().decode('utf-8')
+            error = proc.stderr.readline().decode('utf-8')
+            sizeFlagI = -1
+            
+            if (error is not None) and (len(error) > 0):
+                self.changed(
+                    None,
+                    error="{}".format(error.strip())
+                )
+                return False
+            
+            if output is not None:
+                sizeFlagI = error.find(RSync._TOTAL_SIZE_FLAG)
+                if sizeFlagI >= 0:
+                    sizeStartI = sizeFlagI + len(RSync._TOTAL_SIZE_FLAG)
+                    sizeEndI = error.find(" ", sizeStartI)
+                    if sizeEndI >= 0:
+                        sizeStr = error[sizeStartI:sizeEndI].strip().replace(",","")
+                        self.totalSize = float(int(sizeStr))
+                        print("self.totalSize: {}".format(self.totalSize))
+            else:
+                return False
+            
             if 'to-check' in output:
                 m = re.findall(r'to-check=(\d+)/(\d+)', output)
-                progress = (100 * (int(m[0][1]) - int(m[0][0]))) / total_files
-                sys.stdout.write('\rDone: ' + str(progress) + '%')
-                sys.stdout.flush()
+                # progress = (100 * (int(m[0][1]) - int(m[0][0]))) / total_files
+                self.progress = ((int(m[0][1]) - int(m[0][0]))) / total_files
+                self.changed(progress)
+                # sys.stdout.write('\rDone: ' + str(self.progress) + '%')
+                # sys.stdout.flush()
                 if int(m[0][0]) == 0:
                     break
-
-        print('\rFinished')
+            elif 'sending incremental file list' in output:
+                self.progress = 0.0
+            else:
+                print("unknown output: '''{}'''".format(output))
+                break
+            
+        print("run completed without any errors.")
+        return True
