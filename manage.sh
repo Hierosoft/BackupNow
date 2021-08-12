@@ -28,6 +28,7 @@ if [ "@$HOSTNAME" = "@linuxtower" ]; then
             customExit "'cd ~/git' failed." $code
         fi
         if [ ! -d "preinstall-linuxtower-maria" ]; then
+            # Run the first-time setup.
             # URL="https://raw.githubusercontent.com/poikilos/preinstall-linuxtower-maria/main/always_add/home/maria/Projects/BackupNow/BackupNow.sh"
             # wget -O ~/Projects/BackupNow/BackupNow.sh "$URL"
             URL="https://github.com/poikilos/preinstall-linuxtower-maria.git"
@@ -51,6 +52,9 @@ if [ "@$HOSTNAME" = "@linuxtower" ]; then
             # ^ signal to BackupNow.sh that this operation ran a backup and that it (version that called this script) doesn't run it
             #   nor cause infinite recursion!
         else
+            # First-time setup was already complete, so run the cross-update & backup.
+            # The shell version of BackupNow is a temporary solution and is not in the BackupNow repo
+            # (It is in the preinstall-linuxtower-maria repo).
             cd ~/git/preinstall-linuxtower-maria
             if [ $code -ne 0 ]; then
                 customExit "'cd ~/git/preinstall-linuxtower-maria' failed." $code
@@ -59,7 +63,7 @@ if [ "@$HOSTNAME" = "@linuxtower" ]; then
             git pull
             rsync -rt ~/git/preinstall-linuxtower-maria/always_add/home/maria/Projects/BackupNow/ /home/maria/Projects/BackupNow
             if [ $code -ne 0 ]; then
-                xmessage -buttons Ok:0 -default Ok -nearmouse "Updating BackupNow failed the old backup will continue." $code
+                xmessage -buttons Ok:0 -default Ok -nearmouse "Updating BackupNow failed. The old backup will continue." $code
                 #chmod +x /home/maria/Projects/BackupNow/BackupNow.sh
                 #/home/maria/Projects/BackupNow/BackupNow.sh
                 exit $code
@@ -70,8 +74,10 @@ if [ "@$HOSTNAME" = "@linuxtower" ]; then
             export UPDATE=false
             /home/maria/Projects/BackupNow/BackupNow.sh --no-management
             exit 0
-            # ^ signal to BackupNow.sh that this operation ran a backup and that it (version that called this script) doesn't run it
-            #   nor cause infinite recursion!
+            # ^ signal to BackupNow.sh that this operation ran a backup and that it
+            #   (The version of BackupNow.sh that called this script) doesn't continue
+            #   to the backup code nor the code that calls this (manage.sh),
+            #   which would cause infinite recursion!
         fi
         #if [ $? -ne 0 ]; then
         #    xmessage -buttons Ok:0 -default Ok -nearmouse "Error: backup $DST_PROFILE/Documents failed. Try re-inserting $targetvol."
