@@ -1,18 +1,30 @@
 #!/usr/bin/env python3
+'''
+Mount a volume by name using gio.
 
-# Quick and dirty implementation of mounting a local volume using Gio.
-# For people who were scratching their heads like me.
+based on:
 
-# Code below based on infos from:
-# http://stackoverflow.com/questions/5709454/gio-check-if-volume-is-mounted
-# http://stackoverflow.com/questions/1991206/accessing-samba-shares-with-gio-in-python/2051628#2051628
+> Quick and dirty implementation of mounting a local volume using Gio.
+> For people who were scratching their heads like me.
+>
+> Code below based on infos from:
+> http://stackoverflow.com/questions/5709454/gio-check-if-volume-is-mounted
+> http://stackoverflow.com/questions/1991206/accessing-samba-shares-with-gio-in-python/2051628#2051628
+
+-oktayacikalin <https://gist.github.com/oktayacikalin/7065927>
+'''
 
 
+import sys
 from gi.repository import Gio, GObject
 
 
-VOLUME_NAME = 'TrekStor'
-VOLUME_UUID = '3d9d84c9-460d-4047-8e6f-1013df72acd0'
+# VOLUME_NAME = 'TrekStor'
+# VOLUME_UUID = '3d9d84c9-460d-4047-8e6f-1013df72acd0'
+
+
+def error(msg):
+    sys.stderr.write("{}\n".format(msg))
 
 
 def mount_done_cb(obj, res, user_data):
@@ -29,7 +41,7 @@ def mount_done_cb(obj, res, user_data):
     user_data.quit()
 
 
-def main():
+def mount(volume_name):
     mo = Gio.MountOperation()
     mo.set_anonymous(True)
 
@@ -41,7 +53,7 @@ def main():
     found = False
     for v in vm.get_volumes():
         name = v.get_name()
-        if name == VOLUME_NAME:
+        if name == volume_name:
             mount = v.get_mount()
             print(name, v.get_uuid(), v.get_mount(), v.get_drive())
             if not mount:
@@ -51,6 +63,13 @@ def main():
 
     if found:
         loop.run()
+
+
+def main():
+    if len(sys.argv) < 2:
+        error("You must enter a volume name as the first argument.")
+        exit(1)
+    mount(sys.argv[1])
 
 
 if __name__ == '__main__':
