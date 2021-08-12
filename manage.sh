@@ -53,8 +53,6 @@ if [ "@$HOSTNAME" = "@linuxtower" ]; then
             #   nor cause infinite recursion!
         else
             # First-time setup was already complete, so run the cross-update & backup.
-            # The shell version of BackupNow is a temporary solution and is not in the BackupNow repo
-            # (It is in the preinstall-linuxtower-maria repo).
             cd ~/git/preinstall-linuxtower-maria
             if [ $code -ne 0 ]; then
                 customExit "'cd ~/git/preinstall-linuxtower-maria' failed." $code
@@ -62,8 +60,10 @@ if [ "@$HOSTNAME" = "@linuxtower" ]; then
             echo "* updating preinstall-linuxtower-maria..."
             git pull
             rsync -rt ~/git/preinstall-linuxtower-maria/always_add/home/maria/Projects/BackupNow/ /home/maria/Projects/BackupNow
+            # ^ The shell version of BackupNow is a temporary solution and is not in the BackupNow repo
+            #   (It is in the preinstall-linuxtower-maria repo).
             if [ $code -ne 0 ]; then
-                xmessage -buttons Ok:0 -default Ok -nearmouse "Updating BackupNow failed. The old backup will continue." $code
+                xmessage -buttons Ok:0 -default Ok -nearmouse "Updating BackupNow failed. The old backup should detect this and continue." $code
                 #chmod +x /home/maria/Projects/BackupNow/BackupNow.sh
                 #/home/maria/Projects/BackupNow/BackupNow.sh
                 exit $code
