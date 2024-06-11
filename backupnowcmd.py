@@ -18,6 +18,12 @@ def changed(self, progress, message=None, error=None):
 
 
 def main():
+    if len(sys.argv) > 3:
+        messagebox.showerror(
+            "Error",
+            "Expected only source&destination but got {}".format(sys.argv[1:])
+        )
+
     try:
         in_folder = sys.argv[1]
         out_folder = sys.argv[2]
@@ -32,12 +38,13 @@ def main():
         return 1
 
     rsync = RSync()
-    result = rsync.run(in_folder, out_folder)
-    if result:
+    code = rsync.run(in_folder, out_folder)
+    # code = result['code']
+    if code == 0:
         print("rsync completed without any errors.")
     else:
-        print("rsync failed.")
-        return 1
+        print("rsync failed (code {}).".format(code))
+        return code
     return 0
 
 
