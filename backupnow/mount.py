@@ -14,8 +14,12 @@ based on:
 -oktayacikalin <https://gist.github.com/oktayacikalin/7065927>
 '''
 
-
+import platform
 import sys
+
+if platform.system() == "Windows":
+    raise SystemError("The mount submodule is not compatible with Windows.")
+
 from gi.repository import Gio, GObject
 
 
