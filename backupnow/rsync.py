@@ -43,9 +43,15 @@ class RSync:
 
     def run(self, src, dst, exclude_from=None, include_from=None,
             exclude=None, include=None):
-        '''
-        dst -- This is the backup destination. The folder name of src
-               (but not the full path) will be added under dst.
+        '''Start and monitor a single rsync operation.
+        Args:
+            dst (str): This is the backup destination. The folder name of src
+                (but not the full path) will be added under dst.
+
+        Returns:
+            int: 0 if good, otherwise error code (positive is for an
+                error code returned by rsync, negative is for internal
+                error).
         '''
 
         print('Dry run:')
@@ -96,10 +102,10 @@ class RSync:
                         None,
                         error="{}".format(error.strip())
                     )
-                    return False
+                    return -1
 
             if output is None:
-                return False
+                return -2
 
             sizeFlagI = output.find(RSync._TOTAL_SIZE_FLAG)
             if sizeFlagI >= 0:
@@ -132,9 +138,9 @@ class RSync:
                 if code is not None:
                     if code == 0:
                         # ^ 0 is good
-                        return True
+                        return 0
                     else:
-                        return False
+                        return code
                 else:
                     print("There was no return code but output was blank.")
                     break
@@ -142,4 +148,4 @@ class RSync:
             else:
                 print("unknown output: '''{}'''".format(output))
 
-        return True
+        return 0
