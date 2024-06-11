@@ -26,10 +26,10 @@ except NameError as ex:
 
 class RSync:
     _TOTAL_SIZE_FLAG = 'total size is '
-    
+
     def __init__(self):
         self._reset()
-    
+
     def _reset(self):
         self.progress = 0.0  # The progress from 0.0 to 1.0
         self.totalSize = sys.float_info.max
@@ -40,7 +40,7 @@ class RSync:
               " a message and an error:\n"
               "changed({}, message=\"{}\", error=\"{}\")"
               "".format(progress, message, error))
-    
+
     def run(self, src, dst, exclude_from=None, include_from=None,
             exclude=None, include=None):
         '''
@@ -52,7 +52,8 @@ class RSync:
 
         cmd = 'rsync -az --stats --dry-run ' + src + ' ' + dst
 
-        proc = subprocess.Popen(cmd,
+        proc = subprocess.Popen(
+            cmd,
             shell=True,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
@@ -74,7 +75,8 @@ class RSync:
         print('Real rsync:')
 
         cmd = 'rsync -avz  --progress ' + src + ' ' + dst
-        proc = subprocess.Popen(cmd,
+        proc = subprocess.Popen(
+            cmd,
             shell=True,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
@@ -85,7 +87,7 @@ class RSync:
             output = proc.stdout.readline().decode('utf-8')
             error = proc.stderr.readline().decode('utf-8')
             sizeFlagI = -1
-            
+
             if (error is not None) and (len(error) > 0):
                 if 'skipping non-regular file' in error:
                     pass
@@ -98,7 +100,7 @@ class RSync:
 
             if output is None:
                 return False
-            
+
             sizeFlagI = output.find(RSync._TOTAL_SIZE_FLAG)
             if sizeFlagI >= 0:
                 sizeStartI = sizeFlagI + len(RSync._TOTAL_SIZE_FLAG)
@@ -113,9 +115,10 @@ class RSync:
                 continue
             elif 'to-check' in output:
                 m = re.findall(r'to-check=(\d+)/(\d+)', output)
-                # progress = (100 * (int(m[0][1]) - int(m[0][0]))) / total_files
+                # progress = \
+                #     (100 * (int(m[0][1]) - int(m[0][0]))) / total_files
                 self.progress = ((int(m[0][1]) - int(m[0][0]))) / total_files
-                self.changed(progress)
+                self.changed(self.progress)
                 # sys.stdout.write('\rDone: ' + str(self.progress) + '%')
                 # sys.stdout.flush()
                 if int(m[0][0]) == 0:
@@ -137,6 +140,6 @@ class RSync:
                     break
                 # if None, the process hasn't terminated yet.
             else:
-                print("unknown output: '''{}'''".format(output))            
-            
+                print("unknown output: '''{}'''".format(output))
+
         return True
