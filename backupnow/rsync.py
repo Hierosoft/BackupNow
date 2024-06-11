@@ -1,27 +1,17 @@
+from __future__ import print_function
 import subprocess
 import re
 import sys
 
-try:
+if sys.version_info.major >= 3:
     try:
-        import tkMessageBox as messagebox
+        from tkinter import messagebox
     except ModuleNotFoundError:
-        # Python 3
-        try:
-            from tkinter import messagebox
-        except ModuleNotFoundError:
-            raise Exception("The rsync module requires the python3-tk"
-                            " package to be installed such as via:\n"
-                            "  sudo apt-get install python3-tk")
-            exit(1)
-except NameError as ex:
-    if "ModuleNotFoundError" in str(ex):
-        # There is no ModuleNotFoundError in Python 2, so trying to
-        # use it will raise a NameError.
-        raise Exception("You are using Python 2"
-                        " but the rsync module requires Python 3.")
-    else:
-        raise ex
+        raise Exception("The rsync module requires the python3-tk"
+                        " package to be installed such as via:\n"
+                        "  sudo apt-get install python3-tk")
+else:
+    import tkMessageBox as messagebox  # noqa: F401  # type: ignore
 
 
 class RSync:
