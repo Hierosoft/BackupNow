@@ -36,6 +36,9 @@ class TestRSync(unittest.TestCase):
         unittest.TestCase.__init__(self, *args, **kwargs)
         # self.src = TestBackupGoNowCmd.src
         self.source1_subtree = TestBackupGoNowCmd.source1_subtree
+        self.new_dst = os.path.join(TEST_DATA_DIR, "destination-new")
+        self.existing_dst = os.path.join(TEST_DATA_DIR, "destination-exists")
+        self.creatable_paths = (self.new_dst, self.existing_dst)
 
     def assertSameNames(self, src, dst):
         self.assertEqual(
@@ -79,7 +82,7 @@ class TestRSync(unittest.TestCase):
 
     def test_existing_destination(self):
         src = os.path.join(TEST_DATA_DIR, "source1")
-        dst = os.path.join(TEST_DATA_DIR, "destination-exists")
+        dst = self.existing_dst
         if os.path.isdir(dst):
             echo0("Removing old \"{}\"".format(dst))
             shutil.rmtree(dst)
@@ -105,6 +108,11 @@ class TestRSync(unittest.TestCase):
         if code != 0:
             raise RuntimeError("rsync failed with code {}".format(code))
         self.assertSameNames(src, dst)
+
+    def tearDown(self):
+        for dst in self.creatable_paths:
+            if os.path.isdir(dst):
+                shutil.rmtree(dst)
 
 
 if __name__ == "__main__":
