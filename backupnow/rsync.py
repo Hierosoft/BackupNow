@@ -160,7 +160,11 @@ class RSync:
         sep = "/"  # "/"" even on windows due to cwRsync requiring /cygdrive/!
         #   (See get_cygwin_path, which does not use os.path.sep (replaces all)
 
-        cmd = shlex_quote(self.rsync_path)+' -az --stats --dry-run ' + src + sep + ' ' + dst
+        cmd = (shlex_quote(self.rsync_path)
+               + ' -asz --stats --dry-run ' + src + sep + ' ' + dst)
+        # -s: --secluded-args "use the protocol to safely send the args"
+        # ^ long arg is "--protect-args" in older versions, so always use -s!
+        # ^ must add sep to src so rsync doesn't create extra sub-subfolder!
         echo0('Dry run ({}):'.format(cmd))
 
         # FIXME: ^ Test self.rsync_path with spaces.
@@ -234,7 +238,9 @@ class RSync:
 
         echo0('Number of files: ' + str(total_files))
 
-        cmd = shlex_quote(self.rsync_path)+' -avz  --progress ' + src + sep + ' ' + dst
+        cmd = (shlex_quote(self.rsync_path)
+               + ' -asvz  --progress ' + src + sep + ' ' + dst)
+        # ^ must add sep to src so rsync doesn't create extra sub-subfolder!
         echo0('\n\n========\nLive run ({}):'.format(cmd))
 
         proc = subprocess.Popen(
