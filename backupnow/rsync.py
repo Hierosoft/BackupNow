@@ -1,9 +1,17 @@
 from __future__ import print_function
 
+import os
 import platform
 import re
+import shlex
+import shutil
 import subprocess
 import sys
+import zipfile
+
+from logging import getLogger
+
+logger = getLogger(__name__)
 
 if sys.version_info.major >= 3:
     try:
@@ -21,10 +29,105 @@ def echo0(*args, **kwargs):
     print(*args, **kwargs)
 
 
+def shlex_quote(value):
+    """Mimic shlex_quote from six"""
+    if platform.system() == "Windows":
+        # For some reason shlex uses single quotes in Windows which fails with
+        # "The filename, directory name, or volume label syntax is incorrect."
+        # so instead add double quotes manually:
+        if " " in value:
+            return '"' + value + '"'
+        else:
+            return value
+    if hasattr(shlex, 'quote'):
+        # requires Python 3.3
+        return shlex.quote(value)
+    else:
+        import pipes
+        return pipes.quote(value)
+
+
+def get_cygwin_path(path):
+    """Replace {letter}: with /cygdrive/{letter}
+
+    This uses path required by cygwin programs such as cwRsync.
+
+    To avoid:
+    > The source and destination cannot both be remote.
+    > rsync error: syntax or usage error (code 1) at main.c(1415) [Receiver=3.3.0]
+
+    Args:
+        path (_type_): _description_
+    """
+    if (len(path) > 1) and (path[1] == ":"):
+        path = "/cygdrive/" + path[0].lower() + path[2:].replace("\\", "/")
+    return path
+
+
+if platform.system() == "Windows":
+    HOME = os.environ['USERPROFILE']
+else:
+    HOME = os.environ['HOME']
+
+
 class RSync:
     _TOTAL_SIZE_FLAG = 'total size is '
+    RSYNC_ARCHIVE = None
+
+    @classmethod
+    def detect_archive(cls):
+        _found_archive = None
+        DOWNLOADS = os.path.join(HOME, "Downloads")
+        for sub in sorted(os.listdir(DOWNLOADS)):
+            if sub.lower().startswith("cwrsync_"):
+                # such as "cwrsync_6.3.0_x64_free.zip"
+                if _found_archive:
+                    echo0('Warning: using newer {} not {}'
+                          .format(sub, _found_archive))
+                _found_archive = os.path.join(DOWNLOADS, sub)
+        return _found_archive
+
+    RSYNC_DIR = "C:\\PortableApps\\cwRsync"
+    # TODO: ^ bin subfolder may need to be in PATH! See cwrsync.cmd for example
+    # RSYNC_BIN = os.path.join(RSYNC_DIR, "cwrsync.cmd")  # only a template!
+    RSYNC_BIN = os.path.join(RSYNC_DIR, "bin", "rsync.exe")
 
     def __init__(self):
+        self.rsync_path = shutil.which("rsync")
+        # ^ `which` requires Python 3.3
+        #   (Uses os.environ['PATH'], or falls back to os.defpath)
+        if not self.rsync_path:
+            if platform.system() == "Windows":
+                if os.path.isfile(RSync.RSYNC_BIN):
+                    self.rsync_path = RSync.RSYNC_BIN
+                else:
+                    RSync.RSYNC_ARCHIVE = RSync.detect_archive()
+                    if not RSync.RSYNC_ARCHIVE:
+                        raise RuntimeError(
+                            "BackupGoNow RSync requires the rsync command"
+                            " in the PATH or custom location {} containing"
+                            " {}"
+                            " (Set RSync.RSYNC_DIR before using RSync"
+                            " constructor to change custom location)."
+                            .format(RSync.RSYNC_DIR, RSync.RSYNC_BIN)
+                        )
+
+                    with zipfile.ZipFile(RSync.RSYNC_ARCHIVE, 'r') as zip_ref:
+                        logger.warning(
+                            "Extracting {} to {}..."
+                            .format(RSync.RSYNC_ARCHIVE, RSync.RSYNC_DIR))
+                        zip_ref.extractall(RSync.RSYNC_DIR)
+                    logger.warning("Done extracting.")
+                    if os.path.isfile(RSync.RSYNC_BIN):
+                        self.rsync_path = RSync.RSYNC_BIN
+                    else:
+                        logger.error(
+                            "Extracting didn't result in {}"
+                            .format(RSync.RSYNC_BIN))
+            else:
+                raise RuntimeError(
+                    "BackupGoNow RSync requires the rsync command in the PATH."
+                )
         self._reset()
 
     def _reset(self):
@@ -51,10 +154,16 @@ class RSync:
                 error code returned by rsync, negative is for internal
                 error).
         '''
+        src = get_cygwin_path(src)
+        dst = get_cygwin_path(dst)
 
-        echo0('Dry run (rsync --dry-run):')
+        sep = "/"  # "/"" even on windows due to cwRsync requiring /cygdrive/!
+        #   (See get_cygwin_path, which does not use os.path.sep (replaces all)
 
-        cmd = 'rsync -az --stats --dry-run ' + src + ' ' + dst
+        cmd = shlex_quote(self.rsync_path)+' -az --stats --dry-run ' + src + sep + ' ' + dst
+        echo0('Dry run ({}):'.format(cmd))
+
+        # FIXME: ^ Test self.rsync_path with spaces.
         # shell = platform.system() != "Windows"
         shell = True
         proc = subprocess.Popen(
@@ -125,9 +234,9 @@ class RSync:
 
         echo0('Number of files: ' + str(total_files))
 
-        echo0('Live run (rsync):', file=sys.stderr)
+        cmd = shlex_quote(self.rsync_path)+' -avz  --progress ' + src + sep + ' ' + dst
+        echo0('\n\n========\nLive run ({}):'.format(cmd))
 
-        cmd = 'rsync -avz  --progress ' + src + ' ' + dst
         proc = subprocess.Popen(
             cmd,
             shell=shell,

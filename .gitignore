@@ -127,3 +127,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# BackupNow-specific files
+/tests/backupnow/data/destination-exists/
+/tests/backupnow/data/destination-new/
