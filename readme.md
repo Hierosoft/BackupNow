@@ -20,8 +20,21 @@ You must install rsync (BackupNow checks for it in the system PATH) using your o
   - Click "Download" tab
   - Download the latest version for your CPU (usually 64-bit) such as <https://itefix.net/dl/free-software/cwrsync_6.3.0_x64_free.zip> (but choose the latest version to ensure you have the latest updates) and save it to your Downloads folder (automatically used usually if using Chrome/Firefox/etc.) so BackupNow can find it to automatically install it for you.
 
+
 ## Developer notes
 ### Windows
 - The auto-installer (`RSync` constructor) extracts the zip file to `C:\PortableApps\cwRsync`
 - If you download more than one version, the auto-installer selects the one with the latest version according to alphabetical sorting starting with "cwrsync_".
 - The RSync class will look in the default path (`C:\PortableApps\cwRsync`) unless RSync.RSYNC_DIR is set before an RSync object is created. The "bin" directory must exist under the RSYNC_DIR. The "bin" folder must contain "rsync.exe".
+
+### Tests
+All tests can be discovered by pytest. From the directory (Leave out `--user` if you have activated a venv):
+```bash
+python3 -m pip install --user pytest
+pytest
+```
+or on Windows, to avoid launching a GUI installer for Microsoft Python, do not call python3 but instead enable the **"py" launcher option** in the installer from [python.org](https://python.org) then:
+```batch
+py -3 -m pip install --user pytest
+py -3 -m pytest
+```
