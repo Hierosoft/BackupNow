@@ -8,10 +8,32 @@ You should have a copy of the license.txt file, otherwise see
 import os
 import sys
 
+MODULE_DIR = os.path.dirname(os.path.realpath(__file__))
+ASSETS_DIR = os.path.join(MODULE_DIR, "assets")
+
+THEME_ROOT = os.path.join(ASSETS_DIR, "forestttktheme")
+
+SEARCH_DIRS = [
+    ASSETS_DIR,
+    THEME_ROOT,
+    os.path.join(THEME_ROOT, "forest-light"),
+    os.path.join(THEME_ROOT, "forest-dark"),
+]
+
 
 def echo0(*args, **kwargs):
     kwargs['file'] = sys.stderr
     print(*args, **kwargs)
+
+
+def find_resource(name):
+    if os.path.exists(name):
+        return os.path.realpath(name)
+    for parent in SEARCH_DIRS:
+        sub_path = os.path.join(parent, name)
+        if os.path.exists(sub_path):
+            return sub_path
+    return None
 
 
 def getRelPath(root, sub_path):

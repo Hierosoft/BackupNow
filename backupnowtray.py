@@ -14,7 +14,12 @@ import platform
 import pystray  # See https://pystray.readthedocs.io/en/stable/usage.html
 import sys
 
-from PIL import Image, ImageDraw
+from PIL import (
+    Image,
+    ImageTk,
+    ImageDraw,
+)
+
 if sys.version_info.major >= 3:
     # from tkinter import *
     import tkinter as tk
@@ -22,6 +27,18 @@ if sys.version_info.major >= 3:
 else:
     import Tkinter as tk  # type: ignore
     import ttk  # type: ignore
+
+from backupnow import (
+    find_resource,
+)
+
+icon_path = None
+if platform.system() == "Windows":
+    icon_path = find_resource("backupnow.ico")
+elif platform.system() == "Darwin":
+    icon_path = find_resource("backupnow.icns")
+else:
+    icon_path = find_resource("backupnow.png")
 
 logger = getLogger(__name__)
 
@@ -49,6 +66,15 @@ def create_image(width, height, color1, color2):
         fill=color2)
 
     return image
+
+
+def load_photoimage(path):
+    ico = Image.open(path)
+    return ImageTk.PhotoImage(ico)
+
+
+def load_image(path):
+    return Image.open(path)
 
 
 def generate_menu():
@@ -79,6 +105,12 @@ def show():
         return
     root = tk.Tk()
     root.title("BackupNow")
+
+    root.iconbitmap(icon_path)  # top left icon
+    root.wm_iconbitmap(icon_path)
+    # root.wm_iconphoto(False, photo)  # 1st arg is "default" (children use it)
+    # See also: icon in pystray Icon constructor.
+
     _ = BackupNowApp(root)
     root.mainloop()
     root = None
@@ -121,9 +153,14 @@ class BackupNowApp(ttk.Frame):
 def main():
     icon = pystray.Icon(
         'BackupNow-Tray',
-        icon=create_image(64, 64, 'black', 'white'),
+        # icon=create_image(64, 64, 'black', 'white'),
+        icon=load_image(icon_path),
         # menu=generate_menu()
     )
+    # ^ Trying to use PhotoImage somehow results in:
+    # "AttributeError: 'PhotoImage' object has no attribute
+    # '_PhotoImage__photo'"
+    # in PIL/ImageTk.py
 
     icon.title = "BackupNow"
 
