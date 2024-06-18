@@ -44,6 +44,7 @@ From the setproctitle documentation:
 - The auto-installer (`RSync` constructor) extracts the zip file to `C:\PortableApps\cwRsync`
 - If you download more than one version, the auto-installer selects the one with the latest version according to alphabetical sorting starting with "cwrsync_".
 - The RSync class will look in the default path (`C:\PortableApps\cwRsync`) unless RSync.RSYNC_DIR is set before an RSync object is created. The "bin" directory must exist under the RSYNC_DIR. The "bin" folder must contain "rsync.exe".
+- The `get_pid_path()` file tracks the PID. This is necessary to avoid multiple copies running, since listing processes doesn't help: process name is just python.exe even with both `setprocname` and setting `multiprocessing.current_process().name`
 
 ### Tests
 All tests can be discovered by pytest. From the directory (Leave out `--user` if you have activated a venv):

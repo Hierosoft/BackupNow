@@ -4,32 +4,39 @@ Create a tray icon and run tasks.
 os.environ may not work correctly with setproctitle. See readme.md.
 """
 from __future__ import print_function
-from setproctitle import setproctitle
+
+import os
+import platform
+import psutil
+import pystray  # See https://pystray.readthedocs.io/en/stable/usage.html
+import re
+import sys
 
 from logging import getLogger
 from multiprocessing import (
     current_process,
 )
-import platform
-import pystray  # See https://pystray.readthedocs.io/en/stable/usage.html
-import sys
-
 from PIL import (
     Image,
     ImageTk,
     ImageDraw,
 )
+from setproctitle import setproctitle
+
 
 if sys.version_info.major >= 3:
     # from tkinter import *
     import tkinter as tk
     from tkinter import ttk
+    from tkinter import messagebox
 else:
     import Tkinter as tk  # type: ignore
     import ttk  # type: ignore
+    import tkMessageBox as messagebox  # type: ignore
 
 from backupnow import (
     find_resource,
+    moreps,
 )
 
 icon_path = None
@@ -43,6 +50,7 @@ else:
 logger = getLogger(__name__)
 
 root = None
+my_pid = None
 
 setproctitle("BackupNow-Tray")
 """
@@ -78,12 +86,6 @@ def load_image(path):
 
 
 def generate_menu():
-    """Build the menu.
-
-    Args:
-        icon (pystray.Icon): The main class for
-            BackupNow-Tray.
-    """
     return pystray.Menu(
         pystray.MenuItem("Show", after_click),
         pystray.MenuItem("Exit", after_click),
@@ -92,7 +94,12 @@ def generate_menu():
 
 def after_click(this_icon, query):
     global icon
+    global root
     if str(query) == "Exit":
+        if root:
+            root.quit()
+            root = None
+        moreps.remove_pid(my_pid)
         this_icon.stop()
         icon = None
     elif str(query) == "Show":
@@ -104,6 +111,7 @@ def show():
     if root is not None:
         return
     root = tk.Tk()
+    # root.protocol("WM_DELETE_WINDOW", on_closing)
     root.title("BackupNow")
 
     root.iconbitmap(icon_path)  # top left icon
@@ -151,6 +159,36 @@ class BackupNowApp(ttk.Frame):
 
 
 def main():
+    global my_pid
+    sibling_pids = []
+    for sibling_pid in moreps.get_pids():
+        if psutil.pid_exists(sibling_pid):
+            # TODO: In case this is a stale PID from before this boot of
+            #   the OS (though the PID should never be left in thi list
+            #   after this program's exit) maybe see if the
+            #   process.name().lower() contains "python" or "backupnow"
+            #   before assuming it is running.
+            sibling_pids.append(sibling_pid)
+        else:
+            # The process is not running but must have not removed
+            #   itself from the list, so remove it:
+            moreps.remove_pid(sibling_pid)
+    if sibling_pids:
+        if len(sibling_pids) > 1:
+            id_msg = "IDs: {}".format(re.sub("[\\[\\]]", "", str(sibling_pids)))
+        else:
+            id_msg = "ID: {}".format(sibling_pids[0])
+        messagebox.showinfo(
+            "BackupNow",
+            "The BackupNow tray icon (process {}) is already running."
+            .format(id_msg)
+        )
+        return 2
+
+    # if psutil.pid_exists():
+    my_pid = os.getpid()
+    moreps.add_pid(my_pid)
+
     icon = pystray.Icon(
         'BackupNow-Tray',
         # icon=create_image(64, 64, 'black', 'white'),
