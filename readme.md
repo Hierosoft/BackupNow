@@ -20,6 +20,24 @@ You must install rsync (BackupNow checks for it in the system PATH) using your o
   - Click "Download" tab
   - Download the latest version for your CPU (usually 64-bit) such as <https://itefix.net/dl/free-software/cwrsync_6.3.0_x64_free.zip> (but choose the latest version to ensure you have the latest updates) and save it to your Downloads folder (automatically used usually if using Chrome/Firefox/etc.) so BackupNow can find it to automatically install it for you.
 
+## Known Issues
+This section only covers issues that have only workarounds and not fixes. View other issues at <https://github.com/Poikilos/BackupNow/issues> before reporting new issues.
+
+From the setproctitle documentation:
+> A few environment variables can be used to customize the module behavior:
+>
+> SPT_NOENV
+> Avoid clobbering /proc/PID/environ.
+>
+> On many platforms, setting the process title will clobber the environ
+> memory area. os.environ will work as expected from within the Python
+> process, but the content of the file /proc/PID/environ will be
+> overwritten. If you require this file not to be broken you can set the
+> SPT_NOENV environment variable to any non-empty value: in this case the
+> maximum length for the title will be limited to the length of the
+> command line.
+
+
 
 ## Developer notes
 ### Windows
