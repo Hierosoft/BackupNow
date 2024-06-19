@@ -5,7 +5,7 @@ import os
 
 from logging import getLogger
 
-from backupnow import (
+from backupnow.bnsysdirs import (
     local_data_path,
     LUID,
 )
