@@ -86,8 +86,9 @@ def load_image(path):
 
 
 def generate_menu():
+    # default arg is associated with left-click (double on Windows)
     return pystray.Menu(
-        pystray.MenuItem("Show", after_click),
+        pystray.MenuItem("Show", after_click, default=True),
         pystray.MenuItem("Exit", after_click),
     )
 
@@ -95,6 +96,8 @@ def generate_menu():
 def after_click(this_icon, query):
     global icon
     global root
+    # type(query) is pystray._base.MenuItem
+    # query.: checked, default, enabled, radio, submenu, text, visible
     if str(query) == "Exit":
         if root:
             root.quit()
@@ -104,6 +107,9 @@ def after_click(this_icon, query):
         icon = None
     elif str(query) == "Show":
         show()
+    else:
+        logger.error("Unknown icon click query=\"{}\""
+                     .format(query))
 
 
 def show():
@@ -193,7 +199,8 @@ def main():
         'BackupNow-Tray',
         # icon=create_image(64, 64, 'black', 'white'),
         icon=load_image(icon_path),
-        # menu=generate_menu()
+        # menu=generate_menu(),
+
     )
     # ^ Trying to use PhotoImage somehow results in:
     # "AttributeError: 'PhotoImage' object has no attribute
