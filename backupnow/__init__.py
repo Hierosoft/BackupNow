@@ -8,10 +8,16 @@ You should have a copy of the license.txt file, otherwise see
 import os
 import sys
 
+from datetime import datetime
 from logging import getLogger
 
-logger = getLogger(__name__)
+from backupnow.taskmanager import (
+    TaskManager,
+    TMTimer,
+)
+from backupnow.bnsettings import settings
 
+logger = getLogger(__name__)
 
 MODULE_DIR = os.path.dirname(os.path.realpath(__file__))
 ASSETS_DIR = os.path.join(MODULE_DIR, "assets")
@@ -78,6 +84,58 @@ def getRelPaths(path, sort=True, root=None):
         results.append(sub_rel)
 
     return results
+
+
+class BackupNow:
+    """Backend for BackupNow (manage operations & scheduling)
+    Requires:
+    - from backupnow.bnsettings import settings
+    """
+    def __init__(self):
+        self.settings = None
+        self.tasker = None
+        self.error_cb = None
+
+    def start(self, tk=None):
+        """Load settings
+        By calling load separately from init, the frontend can handle
+        exceptions here & fix an instance.
+
+        Args:
+            tk (tkinter.Tk): A tk instance for using & starting timers.
+        """
+        self.settings = settings
+        self.tasker = TaskManager()
+        # if "tasks" not in settings  # always in settings even if file blank
+        # for task in settings['tasks']:
+        self.tasker.from_dicts(settings['tasks'])
+        self.tk = tk
+        self.busy = False
+        self.error = None
+        if self.tk:
+            self.run_tk_timer()
+
+    def run_tasks(self):
+        tmtasks = self.tasker.get_ready_timers(datetime.now())
+        if not tmtasks:
+            self.show_error("There are no tasks scheduled.")
+
+    def show_error(self, error):
+        self.error = error
+        if self.error_cb:
+            self.error_cb(error)
+
+    def run_tk_timer(self):
+        self.tk.after(10000, self.run_tk_timer)
+        if self.busy:
+            return
+        self.busy = True
+        self.error = None
+        try:
+            self.run_tasks()
+        except Exception as ex:
+            self.error = "{}: {}".format(type(ex).__name__, ex)
+        self.busy = False
 
 
 if __name__ == "__main__":
