@@ -32,7 +32,7 @@ else:
         self['CACHES'] = os.path.join(self['HOME'], ".cache")
 
 
-def get_sysdir_sub(key, leaf=None, luid=None):
+def get_sysdir_sub(key, leaf=None, luid=LUID):
     """Get a path specific to the program (luid) under a system folder.
     The subfolder specific to the luid, but not the leaf under that,
     will be created if the subfolder does not exist.
