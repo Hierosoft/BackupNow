@@ -12,7 +12,7 @@ else:
     import tkMessageBox as messagebox  # type: ignore
 
 
-def changed(self, progress, message=None, error=None):
+def changed(progress, message=None, error=None):
     print("changed({}, message=\"{}\", error=\"{}\")"
           "".format(progress, message, error))
 
