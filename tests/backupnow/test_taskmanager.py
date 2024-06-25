@@ -1,6 +1,5 @@
 import os
 import sys
-import time
 import unittest
 
 from datetime import datetime, timedelta
@@ -41,6 +40,128 @@ class TestBackupGoNowCmd(unittest.TestCase):
         # super(TestBackupGoNowCmd).__init__()
         unittest.TestCase.__init__(self, *args, **kwargs)
         # self.src = TestBackupGoNowCmd.src
+
+    def test_time_until(self):
+        now = datetime(year=2024, month=6, day=20, hour=12, minute=0, second=0)
+        timerdict = {
+            "time": "12:01",
+            "span": "daily",
+            "commands": ["*"],
+        }
+        timer = TMTimer(timerdict=timerdict)
+        delta = timer.time_until(now=now)
+        seconds = int(delta.total_seconds())
+        minutes = int(seconds/60)
+        self.assertEqual(minutes, 1)
+
+        timerdict = {
+            "time": "12:00",
+            "span": "daily",
+            "commands": ["*"],
+        }
+        timer = TMTimer(timerdict=timerdict)
+        delta = timer.time_until(now=now)
+        seconds = int(delta.total_seconds())
+        minutes = int(seconds/60)
+        self.assertEqual(minutes, 0)
+
+        timerdict = {
+            "time": "11:59",
+            "span": "daily",
+            "commands": ["*"],
+        }
+        timer = TMTimer(timerdict=timerdict)
+        delta = timer.time_until(now=now)
+        seconds = int(delta.total_seconds())
+        minutes = int(seconds/60)
+        self.assertEqual(minutes, -1)
+
+    def test_validate_time(self):
+        timerdict = settings.default_timerdict()  # ["*"] 12:00 daily
+        timer = TMTimer(timerdict=timerdict)
+        self.assertEqual(
+            timer.validate_time("1:32"),
+            "01:32"
+        )
+
+        self.assertEqual(
+            timer.validate_time("0:00"),
+            "00:00"
+        )
+
+        self.assertEqual(
+            timer.validate_time("00:00"),
+            "00:00"
+        )
+
+        self.assertEqual(
+            timer.validate_time("11:59"),
+            "11:59"
+        )
+
+        detected = False
+        try:
+            time = timer.validate_time("13:2")
+            echo0("Error: bad value={}".format(time))
+        except ValueError:
+            detected = True
+        self.assertTrue(detected)
+
+        detected = False
+        try:
+            time = timer.validate_time("24:00")
+            echo0("Error: bad value={}".format(time))
+        except ValueError:
+            detected = True
+        self.assertTrue(detected)
+
+        detected = False
+        try:
+            time = timer.validate_time("21:60")
+            echo0("Error: bad value={}".format(time))
+        except ValueError:
+            detected = True
+        self.assertTrue(detected)
+
+        detected = False
+        try:
+            time = timer.validate_time("-1:00")
+            echo0("Error: bad value={}".format(time))
+        except ValueError:
+            detected = True
+        self.assertTrue(detected)
+
+        detected = False
+        try:
+            time = timer.validate_time("1:-1")
+            echo0("Error: bad value={}".format(time))
+        except ValueError:
+            detected = True
+        self.assertTrue(detected)
+
+    def test_tmtask_weekly(self):
+        now = datetime(year=2024, month=6, day=20, hour=12, minute=0, second=0)
+        # dow_name = now.strftime("%A")
+        # print(dow_name)  # Thursday (6/20/2024)
+        # ^ For index see INDEX_OF_DOW[dow_name]
+        #   (or dow_index_fmt = "%w") in taskmanager.py ("4" for Thursday)
+        # mgr = TaskManager()
+        timerdict = settings.default_timerdict()  # ["*"] 12:00 daily
+        timerdict['time'] = "12:01"
+        timerdict['span'] = "weekly"
+        timerdict['day_of_week'] = "Thursday"
+        timer = TMTimer(timerdict=timerdict)
+        # mgr.add_timer(settings.default_backup_name, timer)
+        self.assertTrue(not timer.ready(now=now))
+        timerdict['time'] = "12:00"
+        timer = TMTimer(timerdict=timerdict)
+        self.assertTrue(timer.ready(now=now))
+
+        delta = timedelta(days=1)
+        earlier = now + delta
+        # print("Testing earlier: {} using {} timer"
+        #       .format(earlier.strftime("%A"), timerdict['day_of_week']))
+        self.assertTrue(not timer.ready(now=earlier))
 
     def test_taskmanager(self):
         # Test timerdict *and* timer

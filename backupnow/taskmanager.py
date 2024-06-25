@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from logging import getLogger
 
 logger = getLogger(__name__)
@@ -47,6 +47,67 @@ class TMTimer:
     def __eq__(self, other):
         return self.to_dict() == other.to_dict()
 
+    def validate_time(self, time):
+        if time and (len(time) == 4) and time[1] == ":":
+            if not time[2:].isnumeric() or not time[:1].isnumeric():
+                raise ValueError("time is not valid: {}".format(time))
+            logger.warning("Prepending 0 to {}".format(time))
+            time = "0" + time
+        if (not time) or (len(time) != 5) or (time[2] != ":"):
+            raise ValueError("time is not valid: {}".format(time))
+        if not time[3:].isnumeric() or not time[:2].isnumeric():
+            raise ValueError("time is not valid: {}".format(time))
+        if (int(time[:2]) > 23) or (int(time[3:]) > 59):
+            raise ValueError("time is not valid: {}".format(time))
+        return time
+
+    def time_until(self, now=None):
+        """Determine how much time passed since the scheduled time.
+
+        Args:
+            now (datetime, optional): The current time. Defaults to
+                datetime.now().
+
+        Raises:
+            ValueError: If self.span is "weekly" but self.day_of_week is
+                not 0 to 6.
+            RuntimeError: If the date could not be determined based on
+                the current date.
+
+        Returns:
+            timedelta: Time until the event is scheduled (positive), or
+                if scheduled today and is already passed, either is 0 or
+                negative.
+        """
+        if now is None:
+            now = datetime.now()
+        date_str = now.strftime(TMTimer.date_fmt)
+        self.time = self.validate_time(self.time)
+        next_dt = datetime.strptime(
+            date_str+" "+self.time,
+            TMTimer.dt_fmt
+        )
+        if self.span == "weekly":
+            if self.day_of_week not in INDEX_OF_DOW.values():
+                raise ValueError("day_of_week was {} (expected {})"
+                                 .format(self.day_of_week,
+                                         list(INDEX_OF_DOW.values())))
+            day_delta = timedelta(days=1)
+            loops = 0
+            while int(next_dt.strftime("%w")) != self.day_of_week:
+                loops += 1
+                if loops > 6:
+                    raise RuntimeError(
+                        "Could not convert day of {} to {}"
+                        .format(next_dt.strftime(TMTimer.dt_fmt),
+                                self.day_of_week))
+                next_dt += day_delta
+        elif self.span == "daily":
+            pass
+        else:
+            raise ValueError("span is not valid: {}".format(self.span))
+        return next_dt - now
+
     def ready(self, now=None):
         """If the timer is ready.
 
@@ -57,24 +118,38 @@ class TMTimer:
         Returns:
             True if the scheduled time is now or before now.
         """
+        # delta = self.time_until(now=now)  # negative if passed
+        # return delta.total_seconds() <= 0.0
+        # ^ Doesn't really work since may be wrong day...so:
         if now is None:
             now = datetime.now()
-        if self.span == "daily":
+        span = self.span
+        date_str = now.strftime(TMTimer.date_fmt)
+        next_dt = datetime.strptime(
+            date_str+" "+self.time,
+            TMTimer.dt_fmt
+        )
+        if span == "weekly":
+            if not isinstance(self.day_of_week, int):
+                raise TypeError("Expected int for day_of_week but got {}({})"
+                                .format(type(self.day_of_week).__name__,
+                                        self.day_of_week))
+            if int(now.strftime("%w")) != self.day_of_week:
+                # ^ *Must* return early because now's day is used below
+                #   ( and now.strftime("%w") != next_dt.strftime("%w"))!
+                return False
+            span = "daily"
+        if span == "daily":
             # now.strftime(TMTimer.time_fmt)
-            date_str = now.strftime(TMTimer.date_fmt)
-            next_dt = datetime.strptime(
-                date_str+" "+self.time,
-                TMTimer.dt_fmt
-            )
-            if next_dt <= now:
-                logger.warning("{} <= {}".format(
-                    next_dt.strftime(TMTimer.dt_fmt),
-                    now.strftime(TMTimer.dt_fmt),
-                ))
+            # if next_dt <= now:
+            #     logger.warning("{} <= {}".format(
+            #         next_dt.strftime(TMTimer.dt_fmt),
+            #         now.strftime(TMTimer.dt_fmt),
+            #     ))
             return next_dt <= now
         else:
             raise ValueError(
-                "Unknown time span (expected daily): {}"
+                "Unknown time span: {} (expected \"daily\" or \"weekly\")"
                 .format(self.span))
 
     def to_dict(self):
