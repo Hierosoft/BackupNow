@@ -17,12 +17,12 @@ from backupnow import (  # noqa: E402
     echo0,
 )
 
-from backupnow.taskmanager import (
+from backupnow.taskmanager import (  # noqa: E402
     TMTimer,
     TaskManager,
 )
 
-from backupnow.bnsettings import settings
+from backupnow.bnsettings import settings  # noqa: E402
 # , Settings
 
 

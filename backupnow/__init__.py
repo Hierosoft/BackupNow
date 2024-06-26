@@ -13,7 +13,7 @@ from logging import getLogger
 
 from backupnow.taskmanager import (
     TaskManager,
-    TMTimer,
+    # TMTimer,
 )
 from backupnow.bnsettings import settings
 

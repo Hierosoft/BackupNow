@@ -181,7 +181,8 @@ def main():
             moreps.remove_pid(sibling_pid)
     if sibling_pids:
         if len(sibling_pids) > 1:
-            id_msg = "IDs: {}".format(re.sub("[\\[\\]]", "", str(sibling_pids)))
+            id_msg = "IDs: {}".format(re.sub("[\\[\\]]", "",
+                                             str(sibling_pids)))
         else:
             id_msg = "ID: {}".format(sibling_pids[0])
         messagebox.showinfo(
