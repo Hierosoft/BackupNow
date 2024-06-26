@@ -41,6 +41,74 @@ class TestBackupGoNowCmd(unittest.TestCase):
         unittest.TestCase.__init__(self, *args, **kwargs)
         # self.src = TestBackupGoNowCmd.src
 
+    def test_ran_daily(self):
+        now = datetime(year=2024, month=6, day=20, hour=12, minute=0, second=0)
+        ran = datetime(year=2024, month=6, day=20, hour=11, minute=1, second=0)
+        timerdict = {
+            "time": "11:58",
+            "span": "daily",
+            "commands": ["*"],
+        }
+        timer = TMTimer(timerdict=timerdict)
+        # delta = timer.time_until(now=now)
+        self.assertTrue(timer.due(now=now))
+
+        # This is an edge case! It assumes someone ran it
+        #   *before* the scheduled time, which should never happen!
+        #   However, it is still due because it is never sheduled then!
+        self.assertTrue(timer.due(now=now, ran=ran))
+        day_delta = timedelta(days=1)
+        minute_delta = timedelta(minutes=1)
+        self.assertFalse(timer.due(now=now-(4*minute_delta), ran=ran))
+
+        self.assertTrue(timer.due(now=now-(4*minute_delta), ran=ran-day_delta))
+        self.assertTrue(timer.due(now=now-(2*minute_delta), ran=ran-day_delta))
+
+        # This is an edge case! It assumes the timer ran late but yesterday.
+        #   now is 11:57, so
+        #   11:58 timer *is* due since missed:
+        #   ran earlier 11:01 yesterday (over 24h)!
+        early = now - (3 * minute_delta)
+        earlier = ran-day_delta
+        echo0("early={}".format(early.strftime(TMTimer.dt_fmt)))  # 11:57
+        echo0("earlier={}".format(earlier.strftime(TMTimer.dt_fmt)))
+        # ^ 11:01 *yesterday*
+
+        date_str = early.strftime(TMTimer.date_fmt)
+        next_dt = datetime.strptime(
+            date_str+" "+timer.time,
+            TMTimer.dt_fmt
+        )
+        # Scheduled time:
+        echo0("next_dt={}".format(next_dt.strftime(TMTimer.dt_fmt)))  # 11:58
+        # due since ran 11:01 yesterday (missed after that) & now early 11:57
+        self.assertTrue(timer.due(now=early, ran=earlier, quiet=False))
+        # delta = now - earlier
+
+        # Not due since earlier (11:01 above) changes to 11:58 yesterday:
+        self.assertFalse(timer.due(now=early, ran=earlier+(minute_delta*57),
+                                   quiet=False))
+
+    def test_ran_weekly(self):
+        now = datetime(year=2024, month=6, day=20, hour=12, minute=0, second=0)
+        ran = datetime(year=2024, month=6, day=20, hour=11, minute=59,
+                       second=0)
+        timerdict = {
+            "time": "11:58",
+            "span": "weekly",
+            "day_of_week": int(now.strftime("%w")),
+            "commands": ["*"],
+        }
+        timer = TMTimer(timerdict=timerdict)
+        self.assertEqual(
+            TMTimer.move_to_day_of_week(ran, timer.day_of_week,
+                                        reverse=True),  # reverse N/A here
+            ran
+        )
+        week_delta = timedelta(days=7)
+        self.assertTrue(timer.due(now=now, ran=ran-week_delta))
+        self.assertFalse(timer.due(now=now, ran=ran))
+
     def test_time_until(self):
         now = datetime(year=2024, month=6, day=20, hour=12, minute=0, second=0)
         timerdict = {
@@ -152,16 +220,16 @@ class TestBackupGoNowCmd(unittest.TestCase):
         timerdict['day_of_week'] = "Thursday"
         timer = TMTimer(timerdict=timerdict)
         # mgr.add_timer(settings.default_backup_name, timer)
-        self.assertTrue(not timer.ready(now=now))
+        self.assertFalse(timer.due(now=now))
         timerdict['time'] = "12:00"
         timer = TMTimer(timerdict=timerdict)
-        self.assertTrue(timer.ready(now=now))
+        self.assertTrue(timer.due(now=now))
 
         delta = timedelta(days=1)
         earlier = now + delta
         # print("Testing earlier: {} using {} timer"
         #       .format(earlier.strftime("%A"), timerdict['day_of_week']))
-        self.assertTrue(not timer.ready(now=earlier))
+        self.assertFalse(timer.due(now=earlier))
 
     def test_taskmanager(self):
         # Test timerdict *and* timer
@@ -208,15 +276,15 @@ class TestBackupGoNowCmd(unittest.TestCase):
         timer.span = "daily"
 
         timer.time = now.strftime(TMTimer.time_fmt)
-        self.assertTrue(timer.ready(now=now))
+        self.assertTrue(timer.due(now=now))
         # ^ should be True since less than 1 min has passed & second=0
 
         timer.time = later.strftime(TMTimer.time_fmt)
-        self.assertTrue(not timer.ready(now=now))
+        self.assertFalse(timer.due(now=now))
         # ^ Should not be true since tmtimer time is later
 
         now = now + timedelta(seconds=60)
-        self.assertTrue(timer.ready(now=now))
+        self.assertTrue(timer.due(now=now))
         # try:
         #     self.assertEqual(
         #         got_subtree,

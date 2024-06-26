@@ -61,6 +61,44 @@ class TMTimer:
             raise ValueError("time is not valid: {}".format(time))
         return time
 
+    @staticmethod
+    def move_to_day_of_week(dt, day_of_week, reverse=False):
+        """Get the closest date matching the day_of_week.
+
+        Args:
+            next_dt (datetime): Any datetime.
+            day_of_week (int): A day of the week, 0 to 6 starting at
+                Sunday.
+            reverse (bool, optional): Whether to search backward.
+                Defaults to False.
+
+        Raises:
+            ValueError: day_of_week is not a number 0 to 6.
+            NotImplementedError: The day of week change was not
+                calculated correctly.
+
+        Returns:
+            datetime: The datetime closest to next_dt matching day_of_week.
+        """
+        if day_of_week not in INDEX_OF_DOW.values():
+            raise ValueError(
+                "day_of_week was {} (expected {})"
+                .format(day_of_week, list(INDEX_OF_DOW.values())))
+        day_delta = timedelta(days=1)
+        loops = 0
+        while int(dt.strftime("%w")) != day_of_week:
+            loops += 1
+            if loops > 6:
+                raise NotImplementedError(
+                    "Could not convert day of {} to {}"
+                    .format(dt.strftime(TMTimer.dt_fmt),
+                            day_of_week))
+            if reverse:
+                dt += day_delta
+            else:
+                dt -= day_delta
+        return dt
+
     def time_until(self, now=None):
         """Determine how much time passed since the scheduled time.
 
@@ -88,35 +126,33 @@ class TMTimer:
             TMTimer.dt_fmt
         )
         if self.span == "weekly":
-            if self.day_of_week not in INDEX_OF_DOW.values():
-                raise ValueError("day_of_week was {} (expected {})"
-                                 .format(self.day_of_week,
-                                         list(INDEX_OF_DOW.values())))
-            day_delta = timedelta(days=1)
-            loops = 0
-            while int(next_dt.strftime("%w")) != self.day_of_week:
-                loops += 1
-                if loops > 6:
-                    raise RuntimeError(
-                        "Could not convert day of {} to {}"
-                        .format(next_dt.strftime(TMTimer.dt_fmt),
-                                self.day_of_week))
-                next_dt += day_delta
+            next_dt = TMTimer.move_to_day_of_week(next_dt, self.day_of_week)
         elif self.span == "daily":
             pass
         else:
             raise ValueError("span is not valid: {}".format(self.span))
         return next_dt - now
 
-    def ready(self, now=None):
-        """If the timer is ready.
+    def due(self, now=None, ran=None, quiet=True):
+        """If the timer is due.
+        If the timer never ran, it will only return True if the day of
+        week matches if self.span is "weekly". Therefore, to run a
+        missed timer from a different day for a new timer that never
+        ran, there is not enough information: So if it never ran, either
+        assume the timer is ready if you don't want to wait for that
+        day, or set ran to a prior day or week (if span is "weekly").
 
         Args:
             now (datetime): The current time for comparison. Defaults to
                 datetime.now().
+            ran (datetime): The time the task ran last. You must use the
+                value from "now" that was used when you ran the command!
+                Otherwise the event may detect it was less than span ago
+                and return False. Defaults to None.
 
         Returns:
-            True if the scheduled time is now or before now.
+            bool: True if the scheduled time is now or before now, but if
+                ran is set & is in the same span, result it False.
         """
         # delta = self.time_until(now=now)  # negative if passed
         # return delta.total_seconds() <= 0.0
@@ -129,23 +165,55 @@ class TMTimer:
             date_str+" "+self.time,
             TMTimer.dt_fmt
         )
+        prev_dt = datetime.strptime(
+            date_str+" "+self.time,
+            TMTimer.dt_fmt
+        )
         if span == "weekly":
-            if not isinstance(self.day_of_week, int):
-                raise TypeError("Expected int for day_of_week but got {}({})"
-                                .format(type(self.day_of_week).__name__,
-                                        self.day_of_week))
-            if int(now.strftime("%w")) != self.day_of_week:
-                # ^ *Must* return early because now's day is used below
-                #   ( and now.strftime("%w") != next_dt.strftime("%w"))!
-                return False
-            span = "daily"
+            prev_dt = TMTimer.move_to_day_of_week(prev_dt, self.day_of_week,
+                                                  reverse=True)
+            if ran:
+                # delta = self.time_until(now=now)  # negative if passed
+                # seconds = int(delta.total_seconds())
+                # week_hours = 7 * 24
+                # week_minutes = week_hours * 60
+                # week_seconds = week_minutes * 60
+                # *Must* return early in any nested case because now's
+                #   day is used below ( and now.strftime("%w") !=
+                #   next_dt.strftime("%w"))!
+                # if (seconds * -1) >= week_seconds:
+                #     return False
+                return ran < prev_dt
+                # ^ simple "<" works even if ran same day,
+                #   since in that case, if it ran the same
+                #   day, it would always be equal or greater
+                #   than prev_dt since prev_dt is when it is
+                #   scheduled (resulting in False).
+            else:
+                if int(now.strftime("%w")) != self.day_of_week:
+                    # NOTE: ^ False if a day late, so set ran to handle that.
+                    return False
+                span = "daily"
         if span == "daily":
             # now.strftime(TMTimer.time_fmt)
-            # if next_dt <= now:
-            #     logger.warning("{} <= {}".format(
-            #         next_dt.strftime(TMTimer.dt_fmt),
-            #         now.strftime(TMTimer.dt_fmt),
-            #     ))
+            if not quiet:
+                if next_dt <= now:
+                    logger.warning("[due] {} <= {}".format(
+                        next_dt.strftime(TMTimer.dt_fmt),
+                        now.strftime(TMTimer.dt_fmt),
+                    ))
+            if ran:
+                # seconds = int((now - ran).total_seconds())
+                seconds = int((now - ran).total_seconds())
+                day_minutes = 24 * 60
+                day_seconds = day_minutes * 60
+                if seconds >= day_seconds:
+                    if not quiet:
+                        logger.warning("[due] {}s >= day ({}s)".format(
+                            seconds,
+                            day_seconds,
+                        ))
+                    return True
             return next_dt <= now
         else:
             raise ValueError(
@@ -261,7 +329,7 @@ class TaskManager:
             now = datetime.now()
         results = {}
         for name, timer in self.timers.items():
-            if timer.ready(now=now):
+            if timer.due(now=now):
                 results[name] = timer
         return results
 
