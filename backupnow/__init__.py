@@ -95,8 +95,11 @@ class BackupNow:
         self.settings = None
         self.tasker = None
         self.error_cb = None
+        self.job = None
+        self.ratio = None
+        self.busy = 0
 
-    def start(self, tk=None):
+    def start(self, job_name, tk=None):
         """Load settings
         By calling load separately from init, the frontend can handle
         exceptions here & fix an instance.
@@ -108,12 +111,16 @@ class BackupNow:
         self.tasker = TaskManager()
         # if "tasks" not in settings  # always in settings even if file blank
         # for task in settings['tasks']:
-        self.tasker.from_dicts(settings['tasks'])
+        job = settings['jobs'][job_name]
+        self.tasker.from_dicts(job['tasks'])
         self.tk = tk
         self.busy = False
         self.error = None
         if self.tk:
             self.run_tk_timer()
+        else:
+            logger.warning("There is no tk timer, "
+                           "so you must keep running run_tasks manually.")
 
     def run_tasks(self):
         tmtasks = self.tasker.get_ready_timers(datetime.now())

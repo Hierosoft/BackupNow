@@ -37,6 +37,7 @@ else:
 from backupnow import (
     find_resource,
     moreps,
+    BackupNow,
 )
 
 icon_path = None
@@ -51,6 +52,7 @@ logger = getLogger(__name__)
 
 root = None
 my_pid = None
+icon = None
 
 setproctitle("BackupNow-Tray")
 """
@@ -99,12 +101,7 @@ def after_click(this_icon, query):
     # type(query) is pystray._base.MenuItem
     # query.: checked, default, enabled, radio, submenu, text, visible
     if str(query) == "Exit":
-        if root:
-            root.quit()
-            root = None
-        moreps.remove_pid(my_pid)
-        this_icon.stop()
-        icon = None
+        quit_window()
     elif str(query) == "Show":
         show()
     else:
@@ -113,28 +110,78 @@ def after_click(this_icon, query):
 
 
 def show():
+    icon.stop()
+    root.after(0, root.deiconify)
+
+
+def quit_window():
     global root
-    if root is not None:
-        return
-    root = tk.Tk()
-    # root.protocol("WM_DELETE_WINDOW", on_closing)
-    root.title("BackupNow")
-
-    root.iconbitmap(icon_path)  # top left icon
-    root.wm_iconbitmap(icon_path)
-    # root.wm_iconphoto(False, photo)  # 1st arg is "default" (children use it)
-    # See also: icon in pystray Icon constructor.
-
-    _ = BackupNowApp(root)
-    root.mainloop()
+    global icon
+    icon.stop()
+    icon = None
+    root.destroy()
     root = None
+    moreps.remove_pid(my_pid)
 
 
-class BackupNowApp(ttk.Frame):
+def on_window_closing_quit():
+    """Quit instead of withdraw.
+    If the OS does not support tray icon menus, call this instead of
+    withdraw_window on close.
+    """
+    quit_window()
+
+
+def on_window_closing():
+    global icon
+    root.withdraw()
+    # image = Image.open(icon_path)
+    # menu = (
+    #     pystray.MenuItem('Show', show_window),
+    #     pystray.MenuItem('Quit', quit_window),
+    # )
+    # icon = pystray.Icon("name", image, "title", menu)
+    # icon.run()
+    icon = pystray.Icon(
+        'BackupNow-Tray',
+        # icon=create_image(64, 64, 'black', 'white'),
+        icon=load_image(icon_path),
+        # menu=generate_menu(),
+
+    )
+    # ^ Trying to use PhotoImage somehow results in:
+    # "AttributeError: 'PhotoImage' object has no attribute
+    # '_PhotoImage__photo'"
+    # in PIL/ImageTk.py
+
+    icon.title = "BackupNow"
+    icon.menu = generate_menu()  # Try to add default click in case no HAS_MENU
+    if pystray.Icon.HAS_MENU:
+        pass
+        # print(
+        #     "Pystray supports {} tray icon menus"
+        #     .format(platform.system()))
+    else:
+        logger.warning(
+            "Pystray does not support {} tray icon menu. Next close will quit."
+            .format(platform.system()))
+        root.protocol('WM_DELETE_WINDOW', on_window_closing_quit)
+
+    icon.run()
+
+
+class BackupNowFrame(ttk.Frame):
 
     def __init__(self, root):
         ttk.Frame.__init__(self, root)
         self.root = root
+
+    def on_form_loading(self):
+        self.root.iconbitmap(icon_path)  # top left icon
+        self.root.wm_iconbitmap(icon_path)
+        # root.wm_iconphoto(False, photo)  # 1st arg is "default" children use
+        # See also: icon in pystray Icon constructor.
+
         root.columnconfigure(0, weight=1)
         root.rowconfigure(0, weight=1)
         # root.title("BackupNow")
@@ -165,6 +212,7 @@ class BackupNowApp(ttk.Frame):
 
 
 def main():
+    global root
     global my_pid
     sibling_pids = []
     for sibling_pid in moreps.get_pids():
@@ -195,32 +243,18 @@ def main():
     # if psutil.pid_exists():
     my_pid = os.getpid()
     moreps.add_pid(my_pid)
+    root = tk.Tk()
+    root.title("BackupNow")
 
-    icon = pystray.Icon(
-        'BackupNow-Tray',
-        # icon=create_image(64, 64, 'black', 'white'),
-        icon=load_image(icon_path),
-        # menu=generate_menu(),
+    frame = BackupNowFrame(root)
 
-    )
-    # ^ Trying to use PhotoImage somehow results in:
-    # "AttributeError: 'PhotoImage' object has no attribute
-    # '_PhotoImage__photo'"
-    # in PIL/ImageTk.py
-
-    icon.title = "BackupNow"
-
-    if pystray.Icon.HAS_MENU:
-        # print(
-        #     "Pystray supports {} tray icon menus"
-        #     .format(platform.system()))
-        icon.menu = generate_menu()
-    else:
-        logger.warning(
-            "Pystray does not support {} tray icon menus"
-            .format(platform.system()))
-
-    icon.run()
+    root.protocol('WM_DELETE_WINDOW', on_window_closing)
+    root.withdraw()  # hide immediately after prepared
+    root.after(10, frame.on_form_loading)  # delay iconbitmap
+    #  (to prevent flash before withdraw:
+    #  https://stackoverflow.com/a/33309424/4541104)
+    root.after(1, on_window_closing)  # Show icon since window is withdrawn!
+    root.mainloop()
     return 0
 
 
