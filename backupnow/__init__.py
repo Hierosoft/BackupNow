@@ -93,13 +93,86 @@ class BackupNow:
     """
     def __init__(self):
         self.settings = None
-        self.tasker = None
+        self.tm = None
         self.error_cb = None
         self.job = None
         self.ratio = None
         self.busy = 0
+        self.errors = []
 
-    def start(self, job_name, tk=None):
+    @property
+    def jobs(self):
+        return settings['jobs']
+
+    def save(self):
+        self.serialize_timers()
+        self.settings.save()
+
+    def load(self):
+        self.settings.load()
+        results = self.deserialize_timers()
+        errors = results.get('errors')
+        if errors:
+            for error in errors:
+                self.errors.append(error)
+
+    def deserialize_timers(self, event_template=None):
+        if event_template is not None:
+            results = event_template
+            if 'errors' not in results:
+                results['errors'] = []
+        else:
+            results = {'errors': []}
+
+        tmdict = self.settings.get('taskmanager')
+        if tmdict:
+            if not isinstance(tmdict, dict):
+                raise TypeError("Expected dict for taskmanager, got {}"
+                                .format(type(tmdict).__name__))
+            self.tm = TaskManager()
+            return self.tm.from_dict(tmdict)
+        return results  # no "error" (tmdict is blank though)
+
+    def serialize_timers(self):
+        self.settings['taskmanager'] = self.tm.to_dict()
+
+    def validate_operation(self, opdict):
+        results = {}
+        errors = []
+        if 'source' not in opdict:
+            errors.append("missing 'source'")
+
+        if errors:
+            results['errors'] = errors
+        return results
+
+    def validate_jobs(self, event_template=None):
+        if event_template is not None:
+            results = event_template
+            if 'errors' not in results:
+                results['errors'] = []
+        else:
+            results = {'errors': []}
+        jobs = settings.get('jobs')
+        if not jobs:
+            return results
+        for name, job in jobs.items():
+            if not name:
+                results['errors'].append("There is a blank job name.")
+            if 'operations' not in job:
+                results['errors'].append("Job '{}' has no operations."
+                                         .format(name))
+                continue
+            for i, operation in enumerate(job['operations']):
+                op_results = self.validate_operation(operation)
+                op_errors = op_results.get('errors')
+                if op_errors:
+                    for op_error in op_errors:
+                        results['errors'].append("operation {} {}"
+                                                 .format(i+1, op_error))
+        return results
+
+    def start(self, tk=None):
         """Load settings
         By calling load separately from init, the frontend can handle
         exceptions here & fix an instance.
@@ -107,23 +180,35 @@ class BackupNow:
         Args:
             tk (tkinter.Tk): A tk instance for using & starting timers.
         """
-        self.settings = settings
-        self.tasker = TaskManager()
-        # if "tasks" not in settings  # always in settings even if file blank
-        # for task in settings['tasks']:
-        job = settings['jobs'][job_name]
-        self.tasker.from_dicts(job['tasks'])
+        self.settings = settings  # self.tm is set by deserialize_timers
+        results = {'errors': []}
+        if "jobs" in settings:
+            results = self.validate_jobs(event_template=results)
+        else:
+            logger.warning("No 'jobs' found in {}.".format(settings.path))
+        if "taskmanager" in settings:
+            results = self.deserialize_timers(event_template=results)
+        else:
+            logger.warning("No 'taskmanager' found in {}."
+                           .format(settings.path))
+            self.tm = TaskManager()
         self.tk = tk
         self.busy = False
-        self.error = None
         if self.tk:
             self.run_tk_timer()
         else:
             logger.warning("There is no tk timer, "
                            "so you must keep running run_tasks manually.")
+        return results
+
+    def stop_sync(self):
+        """Stop synchronously
+        (wait until threads are cancelled before return)
+        """
+        return True
 
     def run_tasks(self):
-        tmtasks = self.tasker.get_ready_timers(datetime.now())
+        tmtasks = self.tm.get_ready_timers(datetime.now())
         if not tmtasks:
             self.show_error("There are no tasks scheduled.")
 
@@ -138,10 +223,10 @@ class BackupNow:
             return
         self.busy = True
         self.error = None
-        try:
-            self.run_tasks()
-        except Exception as ex:
-            self.error = "{}: {}".format(type(ex).__name__, ex)
+        # try:
+        self.run_tasks()
+        # except Exception as ex:
+        #     self.error = "{}: {}".format(type(ex).__name__, ex)
         self.busy = False
 
 

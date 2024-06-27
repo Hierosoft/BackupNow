@@ -15,6 +15,7 @@ else:
     self = sysdirs  # See also Constants in hierosoft/sysdirs.py
     sysdirs['HOME'] = os.environ['HOME']
     if platform.system() == "Darwin":
+        # macOS
         sysdirs['APPDATA']
         self['APPDATA'] = os.path.join(
             self['HOME'],
@@ -25,11 +26,12 @@ else:
         self['CACHES'] = os.path.join(self['HOME'], "Library",
                                       "Caches")  # .net Core-like
     else:
-        # XDG-like
+        # Linux or other using XDG standards is assumed in this case
         self['APPDATA'] = os.path.join(self['HOME'], ".config")
         self['LOCALAPPDATA'] = os.path.join(self['HOME'], ".local",
                                             "share")  # .net-like
         self['CACHES'] = os.path.join(self['HOME'], ".cache")
+    del self
 
 
 def get_sysdir_sub(key, leaf=None, luid=LUID):

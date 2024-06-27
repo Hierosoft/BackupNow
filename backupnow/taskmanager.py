@@ -36,13 +36,21 @@ class TMTimer:
         self.time = None
         self.span = None
         self.commands = None
+        self.errors = None
         self._base_keys = list(self.__dict__.keys())
         self.day_of_week = None
         self._all_keys = list(self.__dict__.keys())
         self._all_keys.remove("_base_keys")
         # print("keys={}".format(self._base_keys))
         if timerdict:
-            self.from_dict(timerdict)
+            if not isinstance(timerdict, dict):
+                raise ValueError(
+                    "Expected dict for timerdict, got {}"
+                    .format(type(timerdict).__name__))
+            results = self.from_dict(timerdict)
+            errors = results.get('errors')
+            if errors:
+                self.errors = errors
 
     def __eq__(self, other):
         return self.to_dict() == other.to_dict()
@@ -276,6 +284,9 @@ class TMTimer:
         """
         if not timerdict:
             raise ValueError("Blank timer={}".format(timerdict))
+        if not isinstance(timerdict, dict):
+            raise ValueError("Expected dict for TMTimer, got {}"
+                             .format(type(timerdict).__name__))
         missing = self.missing(timerdict=timerdict, span=timerdict.get('span'))
         if missing:
             raise ValueError("Missing {} in {}".format(missing, timerdict))
@@ -303,26 +314,51 @@ class TMTimer:
 
 
 class TaskManager:
+    """Manage generic timers than can be used for any program.
+    """
     def __init__(self):
         self.timers = {}
+        self.enabled = True
 
-    def to_subdict(self, settings, key):
-        for name, timer in self.timers.items():
-            settings[key][name] = timer.to_dict()
+    def to_subdict(self, settings, key="taskmanager"):
+        settings[key] = self.to_dict()
 
-    def to_dict_tree(self):
-        results = {}
+    def to_dict(self):
+        tmdict = {}
+        tmdict['enabled'] = self.enabled
+        tmdict['timers'] = {}
+        if self.timers is None:
+            raise ValueError("Timers were not ready. See from_dict errors.")
         for name, timer in self.timers:
-            results[name] = timer.to_dict()
-        return results
+            tmdict['timers'][name] = timer.to_dict()
+        return tmdict
 
-    def from_dict_tree(self, timerdicts):
+    def from_dict(self, tmdict):
+        if not isinstance(tmdict, dict):
+            raise ValueError("Expected dict for taskmanager, got {}"
+                             .format(type(tmdict).__name__))
+        results = {'errors': []}
+        self.enabled = tmdict.get('enabled')
+        if self.enabled not in (True, False):
+            logger.warning("'enabled' was not set for taskmanager."
+                           " Defaulting to True.")
+            self.enabled = True
         if self.timers:
             logger.warning("from_dicts is overwriting timers: {}"
                            .format(self.timers))
-        self.timers = {}
-        for name, timerdict in timerdicts.items():
-            self.timers[name] = TMTimer(timerdict=timerdict)
+        timers = {}
+        if tmdict.get('timers'):
+            # try:
+            for name, timerdict in tmdict['timers'].items():
+                timers[name] = TMTimer(timerdict=timerdict)
+            # except Exception as ex:
+            #     results['errors'].append("{}: {}".format(type(ex).__name__, ex))
+        if results['errors']:
+            self.timers = None  # error state (triggers exception on to_dict
+            #   to prevent erasing corrupt settings)
+        else:
+            self.timers = timers
+        return results
 
     def get_ready_timers(self, now=None):
         if now is None:

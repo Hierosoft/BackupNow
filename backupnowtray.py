@@ -90,24 +90,53 @@ class BackupNowFrame(ttk.Frame):
         ttk.Frame.__init__(self, root)
         self.root = root
         self.icon = None
+        root.after(0, self._on_form_loading)  # delay iconbitmap
+        #  & widget creation until after hiding is complete.
+        #  (to prevent flash before withdraw:
+        #  https://stackoverflow.com/a/33309424/4541104)
+        self.core = None
+        # root.after(100, self._start)
 
-    def on_form_loading(self):
+    def _on_form_loading(self):
+        logger.warning("Form is loading...")
         root = self.root
-        root.iconbitmap(icon_path)  # top left icon
-        root.wm_iconbitmap(icon_path)
         # root.wm_iconphoto(False, photo)  # 1st arg is "default" children use
         # See also: icon in pystray Icon constructor.
-
         root.columnconfigure(0, weight=1)
         root.rowconfigure(0, weight=1)
         # root.title("BackupNow")
         self.notebook = ttk.Notebook(root)
         self.notebook.pack(fill=tk.BOTH, expand=True)
         self.log_panel = ttk.Frame(self.notebook)
-        self.notebook.add(self.log_panel, text="Tasks")  # returns None
-        self.add_log_container(self.log_panel)
+        self.notebook.add(self.log_panel, text="Log")  # returns None
+        self._add_log_container(self.log_panel)
+        root.iconbitmap(icon_path)  # top left icon
+        root.wm_iconbitmap(icon_path)
+        logger.warning("Form loaded.")
+        # root.after(0, self._start)  # "withdraw" seems to prevent this :( so:
+        self._start()
 
-    def add_log_container(self, container):
+    def _start(self):
+        if self.core:
+            raise RuntimeError("BackupNow core was already initialized.")
+        logger.warning("Starting core...")
+        self.core = BackupNow()
+        self.core.start(tk=self.root)
+        logger.warning("Loading settings...")
+        self.core.load()
+        if self.core.errors:
+            for error in self.core.errors:
+                logger.error(error)
+            self.core.errors = []
+        logger.warning("Saving settings...")
+        self.core.save()
+        if self.core.errors:
+            for error in self.core.errors:
+                logger.error(error)
+            self.core.errors = []
+        logger.warning("Saved settings.")
+
+    def _add_log_container(self, container):
         # container.padding = "3 3 12 12"
         # container.grid(column=0, row=0, sticky=(tk.N, tk.W, tk.E, tk.S))
         container.columnconfigure(0, weight=1)
@@ -119,22 +148,14 @@ class BackupNowFrame(ttk.Frame):
         # for child in container.winfo_children():
         #     child.grid_configure(padx=5, pady=5)
 
-    def calculate(self, *args):
-        try:
-            value = float(self.feet.get())
-            self.meters.set(int(0.3048 * value * 10000.0 + 0.5)/10000.0)
-        except ValueError:
-            pass
-
-
-    def generate_menu(self):
+    def _generate_menu(self):
         # default arg is associated with left-click (double on Windows)
         return pystray.Menu(
-            pystray.MenuItem("Show", self.after_click, default=True),
-            pystray.MenuItem("Exit", self.after_click),
+            pystray.MenuItem("Show", self._after_click, default=True),
+            pystray.MenuItem("Exit", self._after_click),
         )
 
-    def after_click(self, _, query):
+    def _after_click(self, _, query):
         """Handle a pystray icon menu click event.
 
         Args:
@@ -145,33 +166,57 @@ class BackupNowFrame(ttk.Frame):
         # type(query) is pystray._base.MenuItem
         # query.: checked, default, enabled, radio, submenu, text, visible
         if str(query) == "Exit":
-            self.quit_window()
+            self._quit()
         elif str(query) == "Show":
-            self.show()
+            self._show()
+            self.core.save()
         else:
             logger.error(
                 "Unknown icon click query=\"{}\""
                 .format(query))
 
-    def show(self):
+    def _show(self):
+        self.root.deiconify()
+        # self.root.after(0, self.root.deiconify)
+        # ^ "after" doesn't seem to run after "withdraw" (?)
         self.icon.stop()
-        self.root.after(0, self.root.deiconify)
 
-    def quit_window(self):
+    def _quit(self):
+        self.icon.title = "Stopping..."
+        # self.root.deiconify()  # if never shown, may be empty
+        # self.root.after(0, self._stop_service)
+        self._stop_service()
+
+    def _stop_service(self):
+        logger.warning("Stopping service...")
+        self.icon.title = "Stopping service..."
+        self.core.stop_sync()
+        # Warning, if after is still scheduled,
+        # destroy (doing things after destroy?)
+        # may cause "Fatal Python error: PyEval_RestoreThread:
+        # the function must be called with the GIL held, but the GIL is
+        # released (the current Python thread state is NULL)
+        # Python runtime state: initialized"
+        # - Seems to be prevented by avoiding
+        #   "after" in "_quit".
+        self.core = None
+        self.icon.title = "Stopping icon..."
         self.icon.stop()
         self.icon = None
+        logger.warning("Stopped.")
         self.root.destroy()
         self.root = None
         moreps.remove_pid(BackupNowFrame.my_pid)
 
-    def on_window_closing_quit(self):
-        """Quit instead of withdraw.
-        If the OS does not support tray icon menus, call this instead of
-        withdraw_window on close.
+    def quit(self):
+        """Quit instead of minimizing to tray.
+        If the OS does not support tray icon menus, this is called
+        instead of quit_to_tray when the window is closed to provide a
+        way to quit.
         """
-        self.quit_window()
+        self._quit()
 
-    def on_window_closing(self):
+    def quit_to_tray(self):
         self.root.withdraw()
         # image = Image.open(icon_path)
         # menu = (
@@ -193,7 +238,7 @@ class BackupNowFrame(ttk.Frame):
         # in PIL/ImageTk.py
 
         self.icon.title = "BackupNow"
-        self.icon.menu = self.generate_menu()  # ensures default if no HAS_MENU
+        self.icon.menu = self._generate_menu()  # ensure default if no HAS_MENU
         if pystray.Icon.HAS_MENU:
             pass
             # print(
@@ -204,7 +249,7 @@ class BackupNowFrame(ttk.Frame):
                 "Pystray does not support {} tray icon menu."
                 " The next time the window closes the program will quit!"
                 .format(platform.system()))
-            self.root.protocol('WM_DELETE_WINDOW', self.on_window_closing_quit)
+            self.root.protocol('WM_DELETE_WINDOW', self.quit)
 
         self.icon.run()
 
@@ -244,12 +289,9 @@ def main():
 
     frame = BackupNowFrame(root)
 
-    root.protocol('WM_DELETE_WINDOW', frame.on_window_closing)
+    root.protocol('WM_DELETE_WINDOW', frame.quit_to_tray)
     root.withdraw()  # hide immediately after prepared
-    root.after(1, frame.on_form_loading)  # delay iconbitmap
-    #  (to prevent flash before withdraw:
-    #  https://stackoverflow.com/a/33309424/4541104)
-    root.after(1, frame.on_window_closing)  # Show icon since window is hidden!
+    root.after(1, frame.quit_to_tray)  # Show icon since window is hidden!
     root.mainloop()
     return 0
 

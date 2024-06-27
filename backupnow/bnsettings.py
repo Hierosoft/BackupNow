@@ -20,7 +20,9 @@ class Settings(dict):
                            " another mount of the source!!")
         self["comment2"] = ("Drives configured by BackupGoNow (not BackupNow)"
                             " contain .BackupGoNow-settings.txt")
-        self["tasks"] = []
+        self['comment3'] = ("In this program, all timers should be"
+                            " \"enabled\", but *jobs* may or may not be.")
+        self["jobs"] = {}
         self["timers"] = {}
 
     def _add_default_timerdict(self):
@@ -44,8 +46,13 @@ class Settings(dict):
             self["timers"] = {}
         self["timers"][key] = timerdict
 
-    def load(self, path):
-        self.path = path
+    def load(self, path=None):
+        if not path:
+            if not self.path:
+                raise ValueError("The path was not set.")
+            path = self.path
+        else:
+            self.path = path
         if not os.path.isfile(path):
             return False
         logger.warning("Loading {}".format(os.path.realpath(path)))
