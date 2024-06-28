@@ -1,10 +1,12 @@
-from datetime import datetime, timedelta
-import logging
+from datetime import (
+    datetime,
+    timedelta,
+    timezone,
+    UTC,
+)
 from logging import getLogger
 
 logger = getLogger(__name__)
-
-logger.setLevel(logging.INFO)
 
 INDEX_OF_DOW = {  # Day number as in strftime("%w")
     "Sunday": 0,
@@ -23,8 +25,19 @@ class TMTimer:
 
     Attributes:
         time (str): Time formatted as time_fmt ("%H:%M").
+        span (str): A timespan for the recurring event ("daily",
+            "weekly"). If "weekly", you must set "day_of_week".
         day_of_week (int): Day of week where Sunday is 0 (dow_index_fmt
             "%w"). This is required only when span is "weekly".
+        commands (list[str]): A list of strings associated with the
+            event. This is what is scheduled by the timer. Store
+            something you can parse or compare so that you can proceed
+            with the associated action when timer is `ready()`.
+            Typically use `get_ready_timers()` in TaskManager to get a
+            list of timers that are ready.
+        ran (datetime):  Timer is only ready if "ran" is before the
+            previous scheduled time, or if never ran and current time is
+            at or after the scheduled time.
 
     Arguments:
         timer (dict): A representation of a timer object.
@@ -41,6 +54,8 @@ class TMTimer:
         self.commands = None
         self._base_keys = list(self.__dict__.keys())
 
+        self.enabled = True
+        self._ran = None
         self.errors = []
         self.day_of_week = None
         self._all_keys = list(self.__dict__.keys())
@@ -51,26 +66,52 @@ class TMTimer:
                 raise ValueError(
                     "Expected dict for timerdict, got {}"
                     .format(type(timerdict).__name__))
-            try:
-                self.from_dict(timerdict)
-            except ValueError as ex:
-                self.errors.append("{}: {}".format(type(ex).__name__, ex))
+            # try:
+            self.from_dict(timerdict)
+            # except ValueError as ex:
+            #     self.errors.append("{}: {}".format(type(ex).__name__, ex))
 
     def __eq__(self, other):
         return self.to_dict() == other.to_dict()
 
+    @property
+    def ran(self):
+        return self._ran
+
+    @ran.setter
+    def ran(self, value):
+        if not isinstance(value, datetime):
+            raise TypeError(
+                "ran should be a datetime, got {}({})"
+                .format(type(value).__name__, value))
+        if value.tzinfo is None:
+            raise ValueError(
+                "value is offset-naive. Set to a UTC time"
+                " or run `from datetime import UTC; dt.replace(tzinfo=UTC)`"
+                " if already UTC")
+        self._ran = value
+
     def validate_time(self, time):
+        if not time:
+            raise ValueError("time is blank: {} in {}"
+                             .format(time, self.__dict__))
         if time and (len(time) == 4) and time[1] == ":":
             if not time[2:].isnumeric() or not time[:1].isnumeric():
                 raise ValueError("time is not valid: {}".format(time))
-            logger.warning("Prepending 0 to {}".format(time))
+            logger.debug("Prepending 0 to {}".format(time))
             time = "0" + time
-        if (not time) or (len(time) != 5) or (time[2] != ":"):
-            raise ValueError("time is not valid: {}".format(time))
+        if len(time) != 5:
+            raise ValueError("time is too short (expected H:MM or HH:MM): {}"
+                             .format(time))
+        if time[2] != ":":
+            raise ValueError("time is missing ':' after \"{}\": {}"
+                             .format(time[:2], time))
         if not time[3:].isnumeric() or not time[:2].isnumeric():
-            raise ValueError("time is not valid: {}".format(time))
+            raise ValueError("time is not valid (expected numbers): {}"
+                             .format(time))
         if (int(time[:2]) > 23) or (int(time[3:]) > 59):
-            raise ValueError("time is not valid: {}".format(time))
+            raise ValueError("time is out of range (expected 0to23:0to59): {}"
+                             .format(time))
         return time
 
     @staticmethod
@@ -116,7 +157,7 @@ class TMTimer:
 
         Args:
             now (datetime, optional): The current time. Defaults to
-                datetime.now().
+                datetime.datetime.now(datetime.UTC).
 
         Raises:
             ValueError: If self.span is "weekly" but self.day_of_week is
@@ -130,22 +171,44 @@ class TMTimer:
                 negative.
         """
         if now is None:
-            now = datetime.now()
-        date_str = now.strftime(TMTimer.date_fmt)
+            now = datetime.now(UTC)
+            # ^ formerly datetime.utcnow()
         self.time = self.validate_time(self.time)
-        next_dt = datetime.strptime(
-            date_str+" "+self.time,
-            TMTimer.dt_fmt
-        )
+        next_dt = self.utc_datetime(what_day=now)
         if self.span == "weekly":
             next_dt = TMTimer.move_to_day_of_week(next_dt, self.day_of_week)
         elif self.span == "daily":
             pass
         else:
             raise ValueError("span is not valid: {}".format(self.span))
+
+        if (next_dt.tzinfo is None) and (now.tzinfo is not None):
+            raise ValueError("next_dt is offset-naive")
+        if (next_dt.tzinfo is not None) and (now.tzinfo is None):
+            raise ValueError("now is offset-naive")
+
         return next_dt - now
 
-    def due(self, now=None, ran=None, quiet=True):
+    def utc_datetime(self, what_day=None):
+        """Convert the time to a datetime.
+
+        Args:
+            what_day (datetime, optional): Combine the time with this
+                day. Defaults to datetime.datetime.now(datetime.UTC).
+
+        Returns:
+            datetime: A combination of what_day and self.time.
+        """
+        if what_day is None:
+            what_day = datetime.now(UTC)
+            # ^ formerly datetime.utcnow()
+        date_str = what_day.strftime(TMTimer.date_fmt)
+        return datetime.strptime(
+            date_str+" "+self.time,
+            TMTimer.dt_fmt
+        ).replace(tzinfo=UTC)  # assumes saved as UTC
+
+    def due(self, now=None, ran=None, quiet=True, allow_late=True):
         """If the timer is due.
         If the timer never ran, it will only return True if the day of
         week matches if self.span is "weekly". Therefore, to run a
@@ -155,12 +218,20 @@ class TMTimer:
         day, or set ran to a prior day or week (if span is "weekly").
 
         Args:
-            now (datetime): The current time for comparison. Defaults to
-                datetime.now().
+            now (datetime): The current time for comparison. Set this
+                to UTC to avoid issues. Defaults to datetime.utcnow().
             ran (datetime): The time the task ran last. You must use the
                 value from "now" that was used when you ran the command!
                 Otherwise the event may detect it was less than span ago
-                and return False. Defaults to None.
+                and return False. Defaults to self.ran.
+            allow_late (bool): Make a "daily" timer not due if ran late.
+                Defaults to True.
+
+        Raises:
+            TypeError: ran (or self.ran if not set) is neither None nor
+                a datetime object.
+            ValueError: self.span is not a valid span (See "span"
+                attribute under TMTimer documentation).
 
         Returns:
             bool: True if the scheduled time is now or before now, but if
@@ -170,17 +241,23 @@ class TMTimer:
         # return delta.total_seconds() <= 0.0
         # ^ Doesn't really work since may be wrong day...so:
         if now is None:
-            now = datetime.now()
+            now = datetime.now(UTC)
+            # ^ formerly datetime.utcnow()
+        self.validate_time(self.time)
         span = self.span
-        date_str = now.strftime(TMTimer.date_fmt)
-        next_dt = datetime.strptime(
-            date_str+" "+self.time,
-            TMTimer.dt_fmt
-        )
-        prev_dt = datetime.strptime(
-            date_str+" "+self.time,
-            TMTimer.dt_fmt
-        )
+        next_dt = self.utc_datetime(what_day=now)
+        prev_dt = self.utc_datetime(what_day=now)
+        if ran is None:
+            if (self.ran is not None) and not isinstance(self.ran, datetime):
+                raise TypeError(
+                    "self.ran should be a datetime, got {}({})"
+                    .format(type(self.ran).__name__, self.ran))
+            ran = self.ran
+        else:
+            if not isinstance(ran, datetime):
+                raise TypeError(
+                    "ran should be a datetime, got {}({})"
+                    .format(type(ran).__name__, ran))
         if span == "weekly":
             prev_dt = TMTimer.move_to_day_of_week(prev_dt, self.day_of_week,
                                                   reverse=True)
@@ -195,6 +272,7 @@ class TMTimer:
                 #   next_dt.strftime("%w"))!
                 # if (seconds * -1) >= week_seconds:
                 #     return False
+                # if allow_late:
                 return ran < prev_dt
                 # ^ simple "<" works even if ran same day,
                 #   since in that case, if it ran the same
@@ -226,6 +304,15 @@ class TMTimer:
                             day_seconds,
                         ))
                     return True
+                if allow_late:
+                    if ran > prev_dt:
+                        logger.info("{} (UTC) timer ran late, so is not due."
+                                    .format(self.time))
+                        return False
+            if (next_dt.tzinfo is None) and (now.tzinfo is not None):
+                raise ValueError("next_dt is offset-naive")
+            if (next_dt.tzinfo is not None) and (now.tzinfo is None):
+                raise ValueError("now is offset-naive")
             return next_dt <= now
         else:
             raise ValueError(
@@ -235,10 +322,24 @@ class TMTimer:
     def to_dict(self):
         missing = self.missing()
         if missing:
-            raise ValueError("Missing {}".format(missing))
+            raise ValueError("Missing {} in {}".format(missing, self.__dict__))
         timerdict = {}
         for key in self.required_keys():
             timerdict[key] = self.__dict__[key]
+        if self.enabled not in (True, False):
+            raise ValueError(
+                "Missing enabled={} (expected boolean)."
+                .format(self.enabled))
+        timerdict['enabled'] = self.enabled
+        if self.ran:
+            # "time.mktime() assumes that the passed tuple is in local
+            # time, calendar.timegm() assumes it's in GMT/UTC"
+            # -<https://stackoverflow.com/a/2956997/4541104>
+            # timerdict['ran'] = self.ran.strftime(TMTimer.dt_fmt)
+            # ran_utc = self.ran.replace(tzinfo=timezone.utc)  # does nothing
+            # timerdict['ran'] = ran_utc.strftime(TMTimer.dt_fmt)
+            timerdict['ran'] = self.ran.timestamp()
+            # .timestamp()
         return timerdict
 
     def required_keys(self, timerdict=None, span=None):
@@ -261,7 +362,7 @@ class TMTimer:
             span = timerdict.get('span')
         missing = []
         for key in self.required_keys(timerdict=timerdict, span=span):
-            if not timerdict[key]:
+            if not timerdict.get(key):
                 missing.append(key)
         return missing
 
@@ -296,6 +397,17 @@ class TMTimer:
             raise ValueError("Missing {} in {}".format(missing, timerdict))
         for key in self.required_keys(span=timerdict.get('span')):
             setattr(self, key, timerdict[key])
+        if 'enabled' in timerdict:
+            if timerdict['enabled'] not in (True, False):
+                raise TypeError("Expected boolean for enabled, but got {}({})"
+                                .format(type(timerdict['enabled']).__name__,
+                                        timerdict['enabled']))
+        else:
+            logger.warning("No \"enabled\" for timer, defaulting to True.")
+            self.enabled = True
+        if 'ran' in timerdict:
+            # self._ran = datetime.strptime(timerdict['ran'], TMTimer.dt_fmt)
+            self._ran = datetime.fromtimestamp(timerdict['ran'], UTC)
         if self.day_of_week:
             if isinstance(self.day_of_week, str):
                 dow_index = INDEX_OF_DOW.get(self.day_of_week.title())
@@ -314,7 +426,8 @@ class TMTimer:
         # Example:
         # then = datetime.strptime("16:00", "%H:%M")
         # datetime.datetime(1900, 1, 1, 16, 0)
-        _ = datetime.strptime(self.time, TMTimer.time_fmt)  # ValueError if bad
+        # _ = datetime.strptime(self.time, TMTimer.time_fmt)  # bad: ValueError
+        self.time = self.validate_time(self.time)
 
 
 class TaskManager:
@@ -322,14 +435,12 @@ class TaskManager:
     """
     def __init__(self):
         self.timers = {}
-        self.enabled = True
 
     def to_subdict(self, settings, key="taskmanager"):
         settings[key] = self.to_dict()
 
     def to_dict(self):
         tmdict = {}
-        tmdict['enabled'] = self.enabled
         tmdict['timers'] = {}
         if self.timers is None:
             raise ValueError("Timers were not ready. See from_dict errors.")
@@ -343,11 +454,6 @@ class TaskManager:
             raise ValueError("Expected dict for taskmanager, got {}"
                              .format(type(tmdict).__name__))
         results = {'errors': []}
-        self.enabled = tmdict.get('enabled')
-        if self.enabled not in (True, False):
-            logger.warning("'enabled' was not set for taskmanager."
-                           " Defaulting to True.")
-            self.enabled = True
         if self.timers:
             logger.warning("from_dicts is overwriting timers: {}"
                            .format(self.timers))
@@ -373,7 +479,8 @@ class TaskManager:
 
     def get_ready_timers(self, now=None):
         if now is None:
-            now = datetime.now()
+            now = datetime.now(UTC)
+            # ^ formerly datetime.utcnow()
         results = {}
         for name, timer in self.timers.items():
             if timer.due(now=now):

@@ -99,7 +99,7 @@ class BackupNowFrame(ttk.Frame):
         # root.after(100, self._start)
 
     def _on_form_loading(self):
-        logger.warning("Form is loading...")
+        logger.info("Form is loading...")
         root = self.root
         # root.wm_iconphoto(False, photo)  # 1st arg is "default" children use
         # See also: icon in pystray Icon constructor.
@@ -113,31 +113,31 @@ class BackupNowFrame(ttk.Frame):
         self._add_log_container(self.log_panel)
         root.iconbitmap(icon_path)  # top left icon
         root.wm_iconbitmap(icon_path)
-        logger.warning("Form loaded.")
+        logger.info("Form loaded.")
         # root.after(0, self._start)  # "withdraw" seems to prevent this :( so:
         self._start()
 
     def _start(self):
         if self.core:
             raise RuntimeError("BackupNow core was already initialized.")
-        logger.warning("Starting core...")
+        logger.info("Starting core...")
         self.core = BackupNow()
         self.core.start()  # Do *not* use tk=self.root: "after" skips if closed
-        logger.warning("Loading settings...")
+        logger.info("Loading settings...")
         self.core.load()
         if self.core.errors:
             logger.error("[_start] load errors:")
             for error in self.core.errors:
                 logger.error("[_start] - {}".format(error))
             self.core.errors = []
-        logger.warning("Saving settings...")
+        logger.info("Saving settings...")
         self.core.save()
         if self.core.errors:
             logger.error("[_start] save errors:")
             for error in self.core.errors:
                 logger.error("[_start] - {}".format(error))
             self.core.errors = []
-        logger.warning("Saved settings.")
+        logger.info("Saved settings.")
 
     def _add_log_container(self, container):
         # container.padding = "3 3 12 12"

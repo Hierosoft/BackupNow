@@ -1,1 +1,1 @@
-.venv\Scripts\python backupnowtray.py
+.venv\Scripts\python backupnowtray.py %*

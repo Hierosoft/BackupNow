@@ -4,13 +4,19 @@ This module is part of the BackupNow project
 by Jake "Poikilos" Gustafson (c) 2021.
 You should have a copy of the license.txt file, otherwise see
 <https://github.com/Poikilos/BackupNow/blob/main/license.txt>.
+
+If using the CLI, run frequently so that scheduled events can be
+checked.
 '''
+import argparse
 import os
 import socket
 import sys
 
-from datetime import datetime
+from datetime import datetime, UTC
+import logging
 from logging import getLogger
+from pprint import pformat
 
 if __name__ == "__main__":
     MODULE_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -19,7 +25,7 @@ if __name__ == "__main__":
 
 from backupnow.taskmanager import (
     TaskManager,
-    # TMTimer,
+    TMTimer,
 )
 from backupnow.bnsettings import settings
 from backupnow.bnsysdirs import (
@@ -27,6 +33,9 @@ from backupnow.bnsysdirs import (
 )
 
 logger = getLogger(__name__)
+# logger.setLevel(INFO)  # does nothing since there are no handlers.
+#   (See basicConfig call in verbose case in main instead).
+del logging
 
 MODULE_DIR = os.path.dirname(os.path.realpath(__file__))
 ASSETS_DIR = os.path.join(MODULE_DIR, "assets")
@@ -106,6 +115,7 @@ class BackupNow:
             error}`.
     """
     default_backup_name = "default_backup"
+    default_settings_path = get_sysdir_sub('LOCALAPPDATA', "settings.json")
 
     def __init__(self):
         self.settings = None
@@ -146,7 +156,7 @@ class BackupNow:
                 raise TypeError("Expected dict for taskmanager, got {}"
                                 .format(type(tmdict).__name__))
             self.tm = TaskManager()
-            logger.warning("Deserializing timers.")
+            logger.debug("Deserializing timers.")
             return self.tm.from_dict(tmdict)
         return results  # no "error" (tmdict is blank though)
 
@@ -199,21 +209,19 @@ class BackupNow:
         """
         self.settings = settings  # self.tm is set by deserialize_timers
 
-        settings_path = get_sysdir_sub('LOCALAPPDATA', "settings.json")
         # settings._add_default_timerdict()
         # ^ preferred, changed if try_file found
-        try_files = {
+        try_files = [
             "backupnow-{}.json".format(socket.gethostname()),
             "backupnow.json",
-            settings_path,
-        }
-        del settings_path
+            BackupNow.default_settings_path,
+        ]
         for try_file in try_files:
             if os.path.isfile(try_file):
                 settings.load(try_file)
                 # ^ sets settings.path
                 break
-        echo0("Using {}".format(self.settings.path))
+        logger.info("Using {}".format(self.settings.path))
 
         settings["comment"] = ("detecting folder *and* file prevents copying"
                                " to another mount of the source!!")
@@ -222,6 +230,8 @@ class BackupNow:
                                 " .BackupGoNow-settings.txt")
         settings['comment3'] = ("In this program, all timers should be"
                                 " \"enabled\", but *jobs* may or may not be.")
+        settings['comment4'] = ("All times should be in UTC"
+                                " (time strings and timestamps).")
         if 'jobs' not in settings:
             settings['jobs'] = {}
         add_default = False
@@ -252,32 +262,44 @@ class BackupNow:
         if 'taskmanager' in settings:
             results = self.deserialize_timers(event_template=results)
             # ^ Can raise TypeError but type of 'taskmanager' is ensured above
+            logger.info(
+                "[BackupNow start] taskmanager={}"
+                .format(settings['taskmanager']))
         else:
-            logger.warning("No 'taskmanager' found in {}."
-                           .format(settings.path))
-            self.tm = TaskManager()
+            # should be fixed above, so:
+            raise NotImplementedError(
+                "No 'taskmanager' found in {}."
+                .format(settings.path)
+            )
+
+            # self.tm = TaskManager()
+        logger.info("[BackupNow start] tm={}".format(self.tm.to_dict()))
         self.tk = tk
         self.busy = False
         if self.tk:
-            logger.warning("tk timer will only run when the window is open"
-                           " (`withdraw` prevents `after`)!")
+            logger.warning(
+                "tk timer will only run when the window is open"
+                " (`withdraw` prevents `after`)!")
             self.run_tk_timer()
         else:
-            logger.warning("There is no tk timer, "
-                           "so you must keep running run_tasks manually.")
+            logger.debug(
+                "There is no tk timer, "
+                "so you must keep running run_tasks manually.")
         return results
 
     def _add_default_timerdict(self):
         self._add_timerdict(
             BackupNow.default_backup_name,
-            self.default_timerdict(),
+            BackupNow.default_timerdict(),
         )
 
-    def default_timerdict(self):
+    @staticmethod
+    def default_timerdict():
         return {
-            "time": "12:00",  # TODO: 16:00
-            "span": "daily",
-            "commands": ["*"],
+            'time': "12:00",  # TODO: 16:00
+            'span': "daily",
+            'commands': ["*"],
+            'enabled': True,
         }
 
     def _add_timerdict(self, key, timerdict):
@@ -297,7 +319,8 @@ class BackupNow:
         return True
 
     def run_tasks(self):
-        tmtasks = self.tm.get_ready_timers(datetime.now())
+        tmtasks = self.tm.get_ready_timers(datetime.now(UTC))
+        # ^ formerly datetime.utcnow()
         if not tmtasks:
             self.show_error("There are no tasks scheduled.")
 
@@ -323,25 +346,130 @@ class BackupNow:
 
 
 def main():
-    echo0("Starting CLI")
+    logger.info("Starting CLI")
+    parser = argparse.ArgumentParser(
+        prog='BackupNow',
+        description=__doc__,
+        # epilog='Text at the bottom of help'
+    )
+    parser.add_argument(
+        '-n',
+        '--backup-name',
+        help=(
+            "Only check timer(s) for a single job name in {settings_file}"
+            .format(
+                settings_file=BackupNow.default_settings_path,
+            )
+        ),
+    )
+    parser.add_argument(
+        '-v',
+        '--verbose',
+        action='store_true',
+        help="Enable verbose output.",
+    )
+    parser.add_argument(
+        '-V',
+        '--debug',
+        action='store_true',
+        help="Enable verbose info and debug output.",
+    )
+    # NOTE: --help is automatically generated (See parser.print_help())
+    # parser.add_argument('-v', '--verbose', action='store_true')
+    args = parser.parse_args()
+    if args.verbose:
+        import logging
+        logging.basicConfig(level=logging.INFO)  # 20 (default is 30)
+        del logging
+    if args.debug:
+        import logging
+        logging.basicConfig(level=logging.DEBUG)  # 10 (default is 30)
+        del logging
+    logger.info("args={}".format(args))
     # prefix = "[main] "
     core = BackupNow()
     results = core.start()
     errors = results.get('errors')
     if errors:
-        echo0("BackupNow start errors:")
+        logger.error("BackupNow start errors:")
         for error in errors:
             logger.error("- {}".format(error))
+
+    now = datetime.now(UTC)
+    logger.warning(
+        "now={}".format(now.strftime(TMTimer.dt_fmt)))
+
     timers = core.tm.get_ready_timers()
-    echo0("Timers: {}".format(core.tm.to_dict()))
+    if core.tm:
+        logger.info("Timers (including non-ready):")
+        if core.tm.timers:
+            for name, timer in core.tm.timers.items():
+                logger.info("{}:".format(name))
+                if timer.ran:
+                    logger.info(
+                        "  ran (UTC): {}"
+                        .format(timer.ran.strftime(TMTimer.dt_fmt)))
+
+                logger.info(
+                    "  time (UTC): {}"
+                    .format(timer.utc_datetime(what_day=now)
+                            .strftime(TMTimer.dt_fmt)))
+                for k, v in timer.to_dict().items():
+                    logger.info("  {}: {}".format(k, v))
+        else:
+            logger.warning("No timers")
+    else:
+        logger.error("No taskmanager")
+    if timers:
+        matching_timers = {}
+        for name, timer in timers.items():
+            logger.info("timer \"{}\" ready: {}".format(name, timer.to_dict()))
+            # ^ {'time': '12:00', 'span': 'daily', 'commands': ['*']}
+            if args.backup_name:
+                if args.backup_name == name:
+                    matching_timers[name] = timer
+                    logger.info("- adding {} timer".format(name))
+                else:
+                    logger.warning(
+                        "- skipped (not {})"
+                        .format(pformat(args.backup_name)))
+        if args.backup_name:
+            timers = matching_timers
+    else:
+        logger.info("No timers are ready.")
+        # ^ This will happen a lot.
     if timers:
         for name, timer in timers.items():
-            echo0("timer \"{}\" ready: {}".format(name, timer.to_dict()))
-            # echo0("  commands: {}".format(timer.commands))
-    else:
-        echo0("No timers are ready.")
+            logger.info("Running timer: {}".format(name))
+            for command in timer.commands:
+                if command == "*":
+                    for job_name, job in core.settings['jobs'].items():
+                        logger.info(
+                            "- command={} job={}"
+                            .format(command, job))
+                        enabled = job.get('enabled')
+                        if enabled is not None:
+                            logger.info("  enabled: {}".format(enabled))
+                        else:
+                            enabled = True
+                            logger.info(
+                                "  enabled: {} (default)"
+                                .format(enabled))
+                        if enabled:
+                            now = datetime.now(UTC)
+                            logger.warning(
+                                "- now={}".format(now.strftime(TMTimer.dt_fmt)))
+                            # ^ formerly datetime.utcnow()
+                            timer.ran = now
+                            core.save()
+                            logger.warning(
+                                "Marked as ran {}"
+                                .format(now.strftime(TMTimer.dt_fmt)))
+                else:
+                    job = core.settings['jobs'].get(command)
+                    logger.warning("- command={} job={}".format(command, job))
     core.save()
-    echo0("[main] saved \"{}\"".format(core.settings.path))
+    logger.info("[main] saved \"{}\"".format(core.settings.path))
     return 0
 
 

@@ -2,7 +2,7 @@ import os
 import sys
 import unittest
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 TEST_SUB_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -15,6 +15,7 @@ if __name__ == "__main__":
 
 from backupnow import (  # noqa: E402
     echo0,
+    BackupNow,
 )
 
 from backupnow.taskmanager import (  # noqa: E402
@@ -42,8 +43,8 @@ class TestBackupGoNowCmd(unittest.TestCase):
         # self.src = TestBackupGoNowCmd.src
 
     def test_ran_daily(self):
-        now = datetime(year=2024, month=6, day=20, hour=12, minute=0, second=0)
-        ran = datetime(year=2024, month=6, day=20, hour=11, minute=1, second=0)
+        now = datetime(year=2024, month=6, day=20, hour=12, minute=0, second=0).replace(tzinfo=UTC)
+        ran = datetime(year=2024, month=6, day=20, hour=11, minute=1, second=0).replace(tzinfo=UTC)
         timerdict = {
             "time": "11:58",
             "span": "daily",
@@ -61,6 +62,10 @@ class TestBackupGoNowCmd(unittest.TestCase):
         minute_delta = timedelta(minutes=1)
         self.assertFalse(timer.due(now=now-(4*minute_delta), ran=ran))
 
+        # *Not* due since ran after the last scheduled time
+        ran_late = now + timedelta(hours=1)
+        self.assertFalse(timer.due(now=now, ran=ran_late))
+
         self.assertTrue(timer.due(now=now-(4*minute_delta), ran=ran-day_delta))
         self.assertTrue(timer.due(now=now-(2*minute_delta), ran=ran-day_delta))
 
@@ -69,7 +74,7 @@ class TestBackupGoNowCmd(unittest.TestCase):
         #   11:58 timer *is* due since missed:
         #   ran earlier 11:01 yesterday (over 24h)!
         early = now - (3 * minute_delta)
-        earlier = ran-day_delta
+        earlier = ran - day_delta
         echo0("early={}".format(early.strftime(TMTimer.dt_fmt)))  # 11:57
         echo0("earlier={}".format(earlier.strftime(TMTimer.dt_fmt)))
         # ^ 11:01 *yesterday*
@@ -86,13 +91,17 @@ class TestBackupGoNowCmd(unittest.TestCase):
         # delta = now - earlier
 
         # Not due since earlier (11:01 above) changes to 11:58 yesterday:
-        self.assertFalse(timer.due(now=early, ran=earlier+(minute_delta*57),
+        yesterday1158 = earlier + (minute_delta * 57)
+        self.assertFalse(timer.due(now=early, ran=yesterday1158,
                                    quiet=False))
+        timer.ran = earlier
+        self.assertTrue(timer.due(now=early, quiet=False))
+        timer.ran = yesterday1158
+        self.assertFalse(timer.due(now=early, quiet=False))
 
     def test_ran_weekly(self):
-        now = datetime(year=2024, month=6, day=20, hour=12, minute=0, second=0)
-        ran = datetime(year=2024, month=6, day=20, hour=11, minute=59,
-                       second=0)
+        now = datetime(year=2024, month=6, day=20, hour=12, minute=0, second=0).replace(tzinfo=UTC)
+        ran = datetime(year=2024, month=6, day=20, hour=11, minute=59, second=0).replace(tzinfo=UTC)
         timerdict = {
             "time": "11:58",
             "span": "weekly",
@@ -110,7 +119,7 @@ class TestBackupGoNowCmd(unittest.TestCase):
         self.assertFalse(timer.due(now=now, ran=ran))
 
     def test_time_until(self):
-        now = datetime(year=2024, month=6, day=20, hour=12, minute=0, second=0)
+        now = datetime(year=2024, month=6, day=20, hour=12, minute=0, second=0).replace(tzinfo=UTC)
         timerdict = {
             "time": "12:01",
             "span": "daily",
@@ -145,7 +154,7 @@ class TestBackupGoNowCmd(unittest.TestCase):
         self.assertEqual(minutes, -1)
 
     def test_validate_time(self):
-        timerdict = settings.default_timerdict()  # ["*"] 12:00 daily
+        timerdict = BackupNow.default_timerdict()  # ["*"] 12:00 daily
         timer = TMTimer(timerdict=timerdict)
         self.assertEqual(
             timer.validate_time("1:32"),
@@ -208,18 +217,18 @@ class TestBackupGoNowCmd(unittest.TestCase):
         self.assertTrue(detected)
 
     def test_tmtask_weekly(self):
-        now = datetime(year=2024, month=6, day=20, hour=12, minute=0, second=0)
+        now = datetime(year=2024, month=6, day=20, hour=12, minute=0, second=0).replace(tzinfo=UTC)
         # dow_name = now.strftime("%A")
         # print(dow_name)  # Thursday (6/20/2024)
         # ^ For index see INDEX_OF_DOW[dow_name]
         #   (or dow_index_fmt = "%w") in taskmanager.py ("4" for Thursday)
         # mgr = TaskManager()
-        timerdict = settings.default_timerdict()  # ["*"] 12:00 daily
+        timerdict = BackupNow.default_timerdict()  # ["*"] 12:00 daily
         timerdict['time'] = "12:01"
         timerdict['span'] = "weekly"
         timerdict['day_of_week'] = "Thursday"
         timer = TMTimer(timerdict=timerdict)
-        # mgr.add_timer(settings.default_backup_name, timer)
+        # mgr.add_timer(BackupNow.default_backup_name, timer)
         self.assertFalse(timer.due(now=now))
         timerdict['time'] = "12:00"
         timer = TMTimer(timerdict=timerdict)
@@ -233,7 +242,7 @@ class TestBackupGoNowCmd(unittest.TestCase):
 
     def test_taskmanager(self):
         # Test timerdict *and* timer
-        timerdict = settings.default_timerdict()  # ["*"] 12:00 daily
+        timerdict = BackupNow.default_timerdict()  # ["*"] 12:00 daily
         timerdict['time'] = "12:01"
         timerdict['span'] = "daily"
         self.run_taskmanager_daily(timerdict=timerdict)
@@ -241,12 +250,12 @@ class TestBackupGoNowCmd(unittest.TestCase):
         self.run_taskmanager_daily(timer=timer)
 
     def run_taskmanager_daily(self, timerdict=None, timer=None):
-        now = datetime(year=2024, month=6, day=20, hour=12, minute=0, second=0)
+        now = datetime(year=2024, month=6, day=20, hour=12, minute=0, second=0).replace(tzinfo=UTC)
         mgr = TaskManager()
         if timer:
-            mgr.add_timer(settings.default_backup_name, timer)
+            mgr.add_timer(BackupNow.default_backup_name, timer)
         else:
-            mgr.add_timer_dict(settings.default_backup_name, timerdict)
+            mgr.add_timer_dict(BackupNow.default_backup_name, timerdict)
         self.assertEqual(mgr.get_ready_timers(now=now), {})
         delta = timedelta(minutes=1)
         now += delta
@@ -255,22 +264,22 @@ class TestBackupGoNowCmd(unittest.TestCase):
         self.assertEqual(
             mgr.get_ready_timers(now=now),
             {
-                settings.default_backup_name: timer,
+                BackupNow.default_backup_name: timer,
             }
         )
 
     def test_taskmanager_dict(self):
         #
         mgr = TaskManager()
-        timerdict = settings.default_timerdict()  # ["*"] 12:00 daily
-        mgr.add_timer_dict(settings.default_backup_name, timerdict)
+        timerdict = BackupNow.default_timerdict()  # ["*"] 12:00 daily
+        mgr.add_timer_dict(BackupNow.default_backup_name, timerdict)
 
     def test_tmtask(self):
         # src = self.src
         # tm = TaskManager()
-        timerdict = settings.default_timerdict()  # ["*"] 12:00 daily
+        timerdict = BackupNow.default_timerdict()  # ["*"] 12:00 daily
         timer = TMTimer(timerdict=timerdict)
-        now = datetime(year=2024, month=6, day=20, hour=12, minute=0, second=0)
+        now = datetime(year=2024, month=6, day=20, hour=12, minute=0, second=0).replace(tzinfo=UTC)
         later = now + timedelta(seconds=60)
         # now = now - timedelta(seconds=59)
         timer.span = "daily"

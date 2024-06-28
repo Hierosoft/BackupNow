@@ -21,7 +21,7 @@ class Settings(dict):
         if not os.path.isfile(path):
             logger.warning("[Settings load] There is no {}".format(path))
             return False
-        logger.warning("Loading {}".format(os.path.realpath(path)))
+        logger.info("Loading {}".format(os.path.realpath(path)))
         with open(path, 'r') as stream:
             meta = json.load(stream)
             # Overlay (keep default values if not in file)
