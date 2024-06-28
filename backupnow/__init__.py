@@ -6,6 +6,7 @@ You should have a copy of the license.txt file, otherwise see
 <https://github.com/Poikilos/BackupNow/blob/main/license.txt>.
 '''
 import os
+import socket
 import sys
 
 from datetime import datetime
@@ -16,6 +17,9 @@ from backupnow.taskmanager import (
     # TMTimer,
 )
 from backupnow.bnsettings import settings
+from backupnow.bnsysdirs import (
+    get_sysdir_sub,
+)
 
 logger = getLogger(__name__)
 
@@ -90,7 +94,14 @@ class BackupNow:
     """Backend for BackupNow (manage operations & scheduling)
     Requires:
     - from backupnow.bnsettings import settings
+
+    Attributes:
+        error_cb (function): The code that creates BackupNow can set
+            this to a function that accepts a dict such as `{'error':
+            error}`.
     """
+    default_backup_name = "default_backup"
+
     def __init__(self):
         self.settings = None
         self.tm = None
@@ -181,6 +192,41 @@ class BackupNow:
             tk (tkinter.Tk): A tk instance for using & starting timers.
         """
         self.settings = settings  # self.tm is set by deserialize_timers
+
+        settings_path = get_sysdir_sub('LOCALAPPDATA', "settings.json")
+        # settings._add_default_timerdict()
+        # ^ preferred, changed if try_file found
+        try_files = {
+            "backupnow-{}.json".format(socket.gethostname()),
+            "backupnow.json",
+            settings_path,
+        }
+        for try_file in try_files:
+            if os.path.isfile(try_file):
+                settings.load(try_file)
+                # ^ sets settings.path
+                break
+        echo0("Using {}".format(settings_path))
+
+        settings["comment"] = ("detecting folder *and* file prevents copying"
+                               " to another mount of the source!!")
+        settings["comment2"] = ("Drives configured by BackupGoNow"
+                                " (not BackupNow) contain"
+                                " .BackupGoNow-settings.txt")
+        settings['comment3'] = ("In this program, all timers should be"
+                                " \"enabled\", but *jobs* may or may not be.")
+        if 'jobs' not in settings:
+            settings['jobs'] = {}
+        add_default = False
+        if 'taskmanager' not in settings:
+            add_default = True
+            settings['taskmanager'] = {
+                'timers': {}
+            }
+        if add_default:  # if not settings['taskmanager'].get('tasks'):
+            self._add_default_timerdict()
+        self.deserialize_timers()
+
         results = {'errors': []}
         if "jobs" in settings:
             results = self.validate_jobs(event_template=results)
@@ -195,11 +241,36 @@ class BackupNow:
         self.tk = tk
         self.busy = False
         if self.tk:
+            logger.warning("tk timer will only run when the window is open"
+                           " (`withdraw` prevents `after`)!")
             self.run_tk_timer()
         else:
             logger.warning("There is no tk timer, "
                            "so you must keep running run_tasks manually.")
         return results
+
+    def _add_default_timerdict(self):
+        self._add_timerdict(
+            BackupNow.default_backup_name,
+            self.default_timerdict(),
+        )
+
+    def default_timerdict(self):
+        return {
+            "time": "12:00",  # TODO: 16:00
+            "span": "daily",
+            "commands": ["*"],
+        }
+
+    def _add_timerdict(self, key, timerdict):
+        """This is private since you should use taskmanager instead
+        and use taskmanager.to_subdict(settings, "timers")
+        """
+        if 'taskmanager' not in self.settings:
+            self.settings['taskmanager'] = {}
+        if 'timers' not in self.settings['taskmanager']:
+            self.settings['taskmanager']['timers'] = {}
+        self.settings['taskmanager']['timers'][key] = timerdict
 
     def stop_sync(self):
         """Stop synchronously
@@ -220,7 +291,10 @@ class BackupNow:
     def run_tk_timer(self):
         self.tk.after(10000, self.run_tk_timer)
         if self.busy:
+            logger.warning("tk timer event: busy")
             return
+        else:
+            logger.warning("tk timer event: run_tasks...")
         self.busy = True
         self.error = None
         # try:
@@ -230,5 +304,11 @@ class BackupNow:
         self.busy = False
 
 
+def main():
+    # echo0("Starting CLI")
+    echo0("Oops! You ran the module.")
+    return 0
+
+
 if __name__ == "__main__":
-    print("Oops! You ran the module.", file=sys.stderr)
+    sys.exit(main())

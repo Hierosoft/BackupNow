@@ -40,6 +40,7 @@ from backupnow import (
     BackupNow,
 )
 
+
 icon_path = None
 if platform.system() == "Windows":
     icon_path = find_resource("backupnow.ico")
@@ -121,7 +122,7 @@ class BackupNowFrame(ttk.Frame):
             raise RuntimeError("BackupNow core was already initialized.")
         logger.warning("Starting core...")
         self.core = BackupNow()
-        self.core.start(tk=self.root)
+        self.core.start()  # Do *not* use tk=self.root: "after" skips if closed
         logger.warning("Loading settings...")
         self.core.load()
         if self.core.errors:
@@ -180,6 +181,8 @@ class BackupNowFrame(ttk.Frame):
         # self.root.after(0, self.root.deiconify)
         # ^ "after" doesn't seem to run after "withdraw" (?)
         self.icon.stop()
+        # ^ Stopping the icon allows Ctrl+C which may be desirable for
+        #   manual testing.
 
     def _quit(self):
         self.icon.title = "Stopping..."
