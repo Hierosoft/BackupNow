@@ -126,14 +126,16 @@ class BackupNowFrame(ttk.Frame):
         logger.warning("Loading settings...")
         self.core.load()
         if self.core.errors:
+            logger.error("[_start] load errors:")
             for error in self.core.errors:
-                logger.error(error)
+                logger.error("[_start] - {}".format(error))
             self.core.errors = []
         logger.warning("Saving settings...")
         self.core.save()
         if self.core.errors:
+            logger.error("[_start] save errors:")
             for error in self.core.errors:
-                logger.error(error)
+                logger.error("[_start] - {}".format(error))
             self.core.errors = []
         logger.warning("Saved settings.")
 

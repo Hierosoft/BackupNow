@@ -1,7 +1,10 @@
 from datetime import datetime, timedelta
+import logging
 from logging import getLogger
 
 logger = getLogger(__name__)
+
+logger.setLevel(logging.INFO)
 
 INDEX_OF_DOW = {  # Day number as in strftime("%w")
     "Sunday": 0,
@@ -36,8 +39,9 @@ class TMTimer:
         self.time = None
         self.span = None
         self.commands = None
-        self.errors = None
         self._base_keys = list(self.__dict__.keys())
+
+        self.errors = []
         self.day_of_week = None
         self._all_keys = list(self.__dict__.keys())
         self._all_keys.remove("_base_keys")
@@ -47,10 +51,10 @@ class TMTimer:
                 raise ValueError(
                     "Expected dict for timerdict, got {}"
                     .format(type(timerdict).__name__))
-            results = self.from_dict(timerdict)
-            errors = results.get('errors')
-            if errors:
-                self.errors = errors
+            try:
+                self.from_dict(timerdict)
+            except ValueError as ex:
+                self.errors.append("{}: {}".format(type(ex).__name__, ex))
 
     def __eq__(self, other):
         return self.to_dict() == other.to_dict()
@@ -329,11 +333,12 @@ class TaskManager:
         tmdict['timers'] = {}
         if self.timers is None:
             raise ValueError("Timers were not ready. See from_dict errors.")
-        for name, timer in self.timers:
+        for name, timer in self.timers.items():
             tmdict['timers'][name] = timer.to_dict()
         return tmdict
 
     def from_dict(self, tmdict):
+        prefix = "[TaskManager from_dict] "
         if not isinstance(tmdict, dict):
             raise ValueError("Expected dict for taskmanager, got {}"
                              .format(type(tmdict).__name__))
@@ -350,9 +355,15 @@ class TaskManager:
         if tmdict.get('timers'):
             # try:
             for name, timerdict in tmdict['timers'].items():
+                logger.info(
+                    prefix+"Loaded \"{}\" timer: {}"
+                    .format(name, timerdict))
                 timers[name] = TMTimer(timerdict=timerdict)
             # except Exception as ex:
-            #     results['errors'].append("{}: {}".format(type(ex).__name__, ex))
+            #     results['errors'].append(
+            #         "{}: {}".format(type(ex).__name__, ex))
+        else:
+            logger.warning(prefix+"There are no timers.")
         if results['errors']:
             self.timers = None  # error state (triggers exception on to_dict
             #   to prevent erasing corrupt settings)

@@ -12,6 +12,11 @@ import sys
 from datetime import datetime
 from logging import getLogger
 
+if __name__ == "__main__":
+    MODULE_DIR = os.path.dirname(os.path.realpath(__file__))
+    REPO_DIR = os.path.dirname(MODULE_DIR)
+    sys.path.insert(0, REPO_DIR)
+
 from backupnow.taskmanager import (
     TaskManager,
     # TMTimer,
@@ -141,6 +146,7 @@ class BackupNow:
                 raise TypeError("Expected dict for taskmanager, got {}"
                                 .format(type(tmdict).__name__))
             self.tm = TaskManager()
+            logger.warning("Deserializing timers.")
             return self.tm.from_dict(tmdict)
         return results  # no "error" (tmdict is blank though)
 
@@ -201,12 +207,13 @@ class BackupNow:
             "backupnow.json",
             settings_path,
         }
+        del settings_path
         for try_file in try_files:
             if os.path.isfile(try_file):
                 settings.load(try_file)
                 # ^ sets settings.path
                 break
-        echo0("Using {}".format(settings_path))
+        echo0("Using {}".format(self.settings.path))
 
         settings["comment"] = ("detecting folder *and* file prevents copying"
                                " to another mount of the source!!")
@@ -218,22 +225,33 @@ class BackupNow:
         if 'jobs' not in settings:
             settings['jobs'] = {}
         add_default = False
+        if 'taskmanager' in settings:
+            if not isinstance(settings['taskmanager'], dict):
+                logger.error(
+                    "Healing non-dict taskmanager={}({})"
+                    .format(
+                        type(self.settings.get('taskmanager')).__name__,
+                        self.settings.get('taskmanager'),
+                    )
+                )
+                del settings['taskmanager']
         if 'taskmanager' not in settings:
             add_default = True
             settings['taskmanager'] = {
                 'timers': {}
             }
         if add_default:  # if not settings['taskmanager'].get('tasks'):
+            logger.warning("Adding default timerdict.")
             self._add_default_timerdict()
-        self.deserialize_timers()
 
         results = {'errors': []}
-        if "jobs" in settings:
+        if 'jobs' in settings:
             results = self.validate_jobs(event_template=results)
         else:
             logger.warning("No 'jobs' found in {}.".format(settings.path))
-        if "taskmanager" in settings:
+        if 'taskmanager' in settings:
             results = self.deserialize_timers(event_template=results)
+            # ^ Can raise TypeError but type of 'taskmanager' is ensured above
         else:
             logger.warning("No 'taskmanager' found in {}."
                            .format(settings.path))
@@ -305,8 +323,25 @@ class BackupNow:
 
 
 def main():
-    # echo0("Starting CLI")
-    echo0("Oops! You ran the module.")
+    echo0("Starting CLI")
+    # prefix = "[main] "
+    core = BackupNow()
+    results = core.start()
+    errors = results.get('errors')
+    if errors:
+        echo0("BackupNow start errors:")
+        for error in errors:
+            logger.error("- {}".format(error))
+    timers = core.tm.get_ready_timers()
+    echo0("Timers: {}".format(core.tm.to_dict()))
+    if timers:
+        for name, timer in timers.items():
+            echo0("timer \"{}\" ready: {}".format(name, timer.to_dict()))
+            # echo0("  commands: {}".format(timer.commands))
+    else:
+        echo0("No timers are ready.")
+    core.save()
+    echo0("[main] saved \"{}\"".format(core.settings.path))
     return 0
 
 
