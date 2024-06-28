@@ -9,10 +9,14 @@ If using the CLI, run frequently so that scheduled events can be
 checked.
 '''
 import argparse
+import copy
 import os
 import socket
 import sys
+import threading
+import time
 
+from collections import OrderedDict
 from datetime import datetime, UTC
 import logging
 from logging import getLogger
@@ -31,6 +35,7 @@ from backupnow.bnsettings import settings
 from backupnow.bnsysdirs import (
     get_sysdir_sub,
 )
+from backupnow.jobswatcher import JobsWatcher
 
 logger = getLogger(__name__)
 # logger.setLevel(INFO)  # does nothing since there are no handlers.
@@ -125,6 +130,7 @@ class BackupNow:
         self.ratio = None
         self.busy = 0
         self.errors = []
+        self.threads = {}
 
     @property
     def jobs(self):
@@ -318,6 +324,42 @@ class BackupNow:
         """
         return True
 
+    def start_job(self, job_name, job, progress_cb=None):
+        if not progress_cb:
+            raise ValueError("Set the progress_cb to a method.")
+        # FIXME: Finish this
+        thread = None
+        event = {}
+        if job_name in self.threads:
+            thread = self.threads[job_name]
+            if not thread or not thread.is_alive():
+                logger.warning("Discarding orphaned thread name={}"
+                               .format(job_name))
+                del self.threads[job_name]
+                thread = None
+        if thread is not None:
+            event = {
+                'error': "{} is already running.".format(job_name),
+                'status': "done",  # Since this instance is done
+            }
+            return event
+        thread = threading.Thread(
+            target=self.run_job_sync,
+            args=(job_name, job),
+            kwargs={'progress_cb': progress_cb},
+        )
+        thread.start()
+        return event
+
+    def run_job_sync(self, job_name, job, progress_cb=None):
+        event = {}
+        logger.warning("[_run_job] job={}".format(job))
+        time.sleep(1)  # FIXME: for debug only
+        logger.warning("[_run_job] done {}".format(job_name))
+        event['status'] = "done"
+        progress_cb(event)
+        return event
+
     def run_tasks(self):
         tmtasks = self.tm.get_ready_timers(datetime.now(UTC))
         # ^ formerly datetime.utcnow()
@@ -385,6 +427,7 @@ def main():
         import logging
         logging.basicConfig(level=logging.DEBUG)  # 10 (default is 30)
         del logging
+    enable_multithreading = False
     logger.info("args={}".format(args))
     # prefix = "[main] "
     core = BackupNow()
@@ -396,9 +439,8 @@ def main():
             logger.error("- {}".format(error))
 
     now = datetime.now(UTC)
-    logger.warning(
-        "now={}".format(now.strftime(TMTimer.dt_fmt)))
-
+    logger.info("now_utc={}".format(now.strftime(TMTimer.dt_fmt)))
+    # ^ main itself is too frequent--Don't use warning or higher importance.
     timers = core.tm.get_ready_timers()
     if core.tm:
         logger.info("Timers (including non-ready):")
@@ -438,36 +480,25 @@ def main():
     else:
         logger.info("No timers are ready.")
         # ^ This will happen a lot.
-    if timers:
-        for name, timer in timers.items():
-            logger.info("Running timer: {}".format(name))
-            for command in timer.commands:
-                if command == "*":
-                    for job_name, job in core.settings['jobs'].items():
-                        logger.info(
-                            "- command={} job={}"
-                            .format(command, job))
-                        enabled = job.get('enabled')
-                        if enabled is not None:
-                            logger.info("  enabled: {}".format(enabled))
-                        else:
-                            enabled = True
-                            logger.info(
-                                "  enabled: {} (default)"
-                                .format(enabled))
-                        if enabled:
-                            now = datetime.now(UTC)
-                            logger.warning(
-                                "- now={}".format(now.strftime(TMTimer.dt_fmt)))
-                            # ^ formerly datetime.utcnow()
-                            timer.ran = now
-                            core.save()
-                            logger.warning(
-                                "Marked as ran {}"
-                                .format(now.strftime(TMTimer.dt_fmt)))
-                else:
-                    job = core.settings['jobs'].get(command)
-                    logger.warning("- command={} job={}".format(command, job))
+    watcher = JobsWatcher(core)
+
+    error = None
+    if not timers:  # may be filtered by --backup-name arg
+        return 0
+    for name, timer in timers.items():
+        watcher.add_timer(name, timer)
+    if enable_multithreading:
+        watcher.start()
+        logger.warning("[main] Waiting for jobs to complete...")
+        while not watcher.is_done():
+            # watcher should set "ran" for when timer ran on its start time.
+            time.sleep(1)
+        error = watcher.error
+    else:
+        job_names = watcher.job_names()
+        logger.warning("[main] Running {}...".format(job_names))
+        event = watcher.run_sync()
+        error = event.get('error')
     core.save()
     logger.info("[main] saved \"{}\"".format(core.settings.path))
     return 0
