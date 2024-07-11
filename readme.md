@@ -46,6 +46,29 @@ From the setproctitle documentation:
 - The RSync class will look in the default path (`C:\PortableApps\cwRsync`) unless RSync.RSYNC_DIR is set before an RSync object is created. The "bin" directory must exist under the RSYNC_DIR. The "bin" folder must contain "rsync.exe".
 - The `get_pid_path()` file tracks the PID. This is necessary to avoid multiple copies running, since listing processes doesn't help: process name is just python.exe even with both `setprocname` and setting `multiprocessing.current_process().name`
 
+Using rsync from a remote source requires an ssh key
+
+Based on <https://www.ch.cam.ac.uk/computing/sync-cwrsync>:
+```
+bin\ssh-keygen -q -t rsa -f cwrsync -N ""
+```
+Move the cwrsync private key file to the folder C:\PortableApps\cwRsync\home\%USERNAME%\.ssh.
+
+> Copy the file cwrsync.pub to the .ssh subdirectory of your Linux login directory on the fileserver. If this directory does not exist create it and the authorized_keys file as follows. Append the cwrsync.pub public key file to the file authorized_keys. From a Linux command line, for example,
+```bash
+ssh %USERNAME%@<group>-fs
+pwd
+mkdir .ssh
+chmod 700 .ssh
+cd .ssh
+cat cwrsync.pub >> authorized_keys
+```
+> Adjust the rsync command in the Windows cwrsync.cmd file to locate the private key file:
+
+```bash
+rsync -r -av -e "ssh -i home\%USERNAME%\.ssh\cwrsync" /cygdrive/c/Users/%USERNAME%/Documents/test_file <group>-fs:/data/group/<group>/general/people/%USERNAME%/home
+```
+
 ### Tests
 All tests can be discovered by pytest. From the directory (Leave out `--user` if you have activated a venv):
 ```bash
