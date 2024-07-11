@@ -11,6 +11,7 @@ import psutil
 import pystray  # See https://pystray.readthedocs.io/en/stable/usage.html
 import re
 import sys
+import threading
 
 from logging import getLogger
 from multiprocessing import (
@@ -86,6 +87,7 @@ def load_image(path):
 
 class BackupNowFrame(ttk.Frame):
     my_pid = None
+    stay_in_tray = True
 
     def __init__(self, root):
         ttk.Frame.__init__(self, root)
@@ -97,6 +99,7 @@ class BackupNowFrame(ttk.Frame):
         #  https://stackoverflow.com/a/33309424/4541104)
         self.core = None
         # root.after(100, self._start)
+        self.icon_thread = None
 
     def _on_form_loading(self):
         logger.info("Form is loading...")
@@ -182,9 +185,11 @@ class BackupNowFrame(ttk.Frame):
         self.root.deiconify()
         # self.root.after(0, self.root.deiconify)
         # ^ "after" doesn't seem to run after "withdraw" (?)
-        self.icon.stop()
-        # ^ Stopping the icon allows Ctrl+C which may be desirable for
-        #   manual testing.
+        if not BackupNowFrame.stay_in_tray:
+            self.icon.stop()
+            # ^ Stopping the icon allows Ctrl+C which may be desirable for
+            #   manual testing.
+            self.icon = None
 
     def _quit(self):
         self.icon.title = "Stopping..."
@@ -194,7 +199,8 @@ class BackupNowFrame(ttk.Frame):
 
     def _stop_service(self):
         logger.warning("Stopping service...")
-        self.icon.title = "Stopping service..."
+        if self.icon:
+            self.icon.title = "Stopping service..."
         self.core.stop_sync()
         # Warning, if after is still scheduled,
         # destroy (doing things after destroy?)
@@ -205,9 +211,10 @@ class BackupNowFrame(ttk.Frame):
         # - Seems to be prevented by avoiding
         #   "after" in "_quit".
         self.core = None
-        self.icon.title = "Stopping icon..."
-        self.icon.stop()
-        self.icon = None
+        if self.icon:
+            self.icon.title = "Stopping icon..."
+            self.icon.stop()
+            self.icon = None
         logger.warning("Stopped.")
         self.root.destroy()
         self.root = None
@@ -222,6 +229,7 @@ class BackupNowFrame(ttk.Frame):
         self._quit()
 
     def quit_to_tray(self):
+        logger.info("Quit to tray...")
         self.root.withdraw()
         # image = Image.open(icon_path)
         # menu = (
@@ -230,6 +238,11 @@ class BackupNowFrame(ttk.Frame):
         # )
         # icon = pystray.Icon("name", image, "title", menu)
         # icon.run()
+        if not self.icon:
+            self.tray_icon_main()
+
+    def tray_icon_main(self):
+        logger.info("Load tray icon...")
         self.icon = pystray.Icon(
             'BackupNow-Tray',
             # icon=create_image(64, 64, 'black', 'white'),
@@ -256,7 +269,14 @@ class BackupNowFrame(ttk.Frame):
                 .format(platform.system()))
             self.root.protocol('WM_DELETE_WINDOW', self.quit)
 
-        self.icon.run()
+        # self.icon.run()
+        self.icon_thread = threading.Thread(daemon=True,
+                                            target=lambda: self.icon.run())
+        self.icon_thread.start()
+        # ^ Now icon.stop() should close the thread according to:
+        #   - See https://stackoverflow.com/a/77102240/4541104
+        #     - which cites https://github.com/moses-palmer/pystray/issues/94
+        logger.info("Loaded tray icon.")
 
 
 def main():
@@ -296,7 +316,7 @@ def main():
 
     root.protocol('WM_DELETE_WINDOW', frame.quit_to_tray)
     root.withdraw()  # hide immediately after prepared
-    root.after(1, frame.quit_to_tray)  # Show icon since window is hidden!
+    root.after(10, frame.quit_to_tray)  # Show icon since window is hidden!
     root.mainloop()
     return 0
 
