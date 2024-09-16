@@ -83,12 +83,14 @@ def append_to_file(script_path, line):
         stream.write(line)
 
 
-def backup_folder(source_path, destination):
+def backup_folder(source_path, destination, depth=0):
     """Back up the contents of a folder to the remote server using rsync.
 
     Args:
         source_path (str): Path to the source folder.
         destination (str): Remote destination path.
+        depth (int, optional): Depth of tree where depth of backup job's
+            'source' is 0 (Reserved for future use).
     """
     folder_name = os.path.basename(source_path)
     remote_destination = "{}/{}".format(destination, folder_name)
