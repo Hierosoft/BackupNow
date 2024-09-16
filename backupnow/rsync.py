@@ -166,12 +166,27 @@ class RSync:
         # ^ long arg is "--protect-args" in older versions, so always use -s!
         # ^ must add sep to src so rsync doesn't create extra sub-subfolder!
         echo0('Dry run ({}):'.format(cmd))
+        my_env = os.environ.copy()
+        RSYNC_BIN_DIR = os.path.dirname(self.rsync_path)
+        if platform.system() == "Windows":
+            my_env['CWRSYNCHOME'] = os.path.dirname(RSYNC_BIN_DIR)
+            working_dir = my_env['CWRSYNCHOME']
+            # ^ contains home/%USERNAME%/.ssh (See readme)
+            # Based on the following lines from cwrsync's included cwrsync.cmd:
+            # SET CWRSYNCHOME=%~dp0
+            # REM Make cwRsync home as a part of system PATH to find required DLLs
+            # SET PATH=%CWRSYNCHOME%\bin;%PATH%
+            my_env["PATH"] = RSYNC_BIN_DIR + os.pathsep + my_env["PATH"]
+        else:
+            working_dir = RSYNC_BIN_DIR
 
         # FIXME: ^ Test self.rsync_path with spaces.
         # shell = platform.system() != "Windows"
         shell = True
         proc = subprocess.Popen(
             cmd,
+            cwd=working_dir,
+            env=my_env,
             shell=shell,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,

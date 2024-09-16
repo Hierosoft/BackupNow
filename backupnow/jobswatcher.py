@@ -190,6 +190,7 @@ class JobsWatcher:
     def check_total_status(self):
         count = 0
         done_count = 0
+        remaining = []
         for name, jobdict in self.timer_jobs.items():
             this_done_count = 0
             this_count = 0
@@ -200,6 +201,8 @@ class JobsWatcher:
                     if job['status'] == "done":
                         done_count += 1
                         this_done_count += 1
+                    else:
+                        remaining.append(job_name)
             if this_done_count >= this_count:
                 if not self.timers_done[name]:
                     self.timers_done[name] = True
@@ -217,6 +220,8 @@ class JobsWatcher:
             self.done_job_count = done_count
         if done_count >= count:
             return True
+        logger.info("not done: {}".format(remaining))
+
         return False
 
     def progress(self, event):
