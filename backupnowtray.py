@@ -36,9 +36,18 @@ else:
     import tkMessageBox as messagebox  # type: ignore
 
 from backupnow import (
+    echo0,
     find_resource,
     moreps,
     BackupNow,
+)
+
+from backupnow.bnjobtk import (
+    JobTk,
+)
+
+from backupnow.bnscrollableframe import (
+    VerticalScrolledFrame,
 )
 
 
@@ -91,6 +100,7 @@ class BackupNowFrame(ttk.Frame):
 
     def __init__(self, root):
         ttk.Frame.__init__(self, root)
+        self.jobs = []
         self.root = root
         self.icon = None
         root.after(0, self._on_form_loading)  # delay iconbitmap
@@ -106,19 +116,32 @@ class BackupNowFrame(ttk.Frame):
         root = self.root
         # root.wm_iconphoto(False, photo)  # 1st arg is "default" children use
         # See also: icon in pystray Icon constructor.
-        root.columnconfigure(0, weight=1)
-        root.rowconfigure(0, weight=1)
         # root.title("BackupNow")
+        root.columnconfigure(0, weight=1)
+        root.rowconfigure(0, weight=1)  # Notebook row
+        root.rowconfigure(1, weight=0)  # Status label row (fixed height)
+
         self.notebook = ttk.Notebook(root)
-        self.notebook.pack(fill=tk.BOTH, expand=True)
+        self.notebook.grid(row=0, column=0, sticky=tk.NSEW)
+        self.jobs_panel = VerticalScrolledFrame(self.notebook)
+        self.notebook.add(self.jobs_panel, text="Jobs")
         self.log_panel = ttk.Frame(self.notebook)
         self.notebook.add(self.log_panel, text="Log")  # returns None
         self._add_log_container(self.log_panel)
         root.iconbitmap(icon_path)  # top left icon
         root.wm_iconbitmap(icon_path)
+        self.status_v = tk.StringVar(self.root)
+        self.status_label = ttk.Label(self.root, state="readonly",
+                                      textvariable=self.status_v)
+        self.status_label.grid(row=1, column=0, sticky=tk.EW)
         logger.info("Form loaded.")
+        self.set_status("Loaded settings...")
         # root.after(0, self._start)  # "withdraw" seems to prevent this :( so:
         self._start()
+        self.set_status("Loaded settings.")
+
+    def set_status(self, msg):
+        self.status_v.set(msg)
 
     def _start(self):
         if self.core:
@@ -141,6 +164,56 @@ class BackupNowFrame(ttk.Frame):
                 logger.error("[_start] - {}".format(error))
             self.core.errors = []
         logger.info("Saved settings.")
+        try:
+            self.show_jobs()
+        except Exception as ex:
+            msg = "{}: {}".format(type(ex).__name__, ex)
+            self.set_status(msg)
+            raise
+
+    def show_jobs(self):
+        container = self.jobs_panel.interior
+        if self.jobs:
+            for job in self.jobs:
+                # job.grid_forget()
+                job.pack_forget()
+            self.jobs = []
+        self.jobs_header_rows = 0
+        self.jobs_label = ttk.Label(container, text=self.core.settings.path)
+        self.jobs_label.pack(side=tk.TOP)
+        self.jobs_header_rows += 1
+        self.jobs_row = self.jobs_header_rows
+        jobs = self.core.settings.get('jobs')
+        # There is also "taskmanager": { "timers": { "default_backup"
+        if not jobs:
+            self.set_status("There are no jobs in the settings file.")
+            return
+        if not hasattr(jobs, 'items'):
+            raise TypeError(
+                "File \"{}\": Expected a dict for {} but got a {}."
+                .format(self.core.settings.path, 'jobs', type(jobs).__name__)
+            )
+        for job_name, job in jobs.items():
+            # job is a dict containing "operations" key pointing to a list
+            panel = JobTk(container)
+            panel.set_name(job_name)
+            panel.pack(side=tk.TOP, fill=tk.X, expand=True)
+            operations = job.get('operations')
+            enabled = job.get('enabled')
+            if enabled is None:
+                enabled = True
+            panel.set_enabled(enabled)
+            if enabled and operations:
+                if not hasattr(operations, 'items'):
+                    raise TypeError(
+                        "File \"{}\": Expected a dict (with sortable keys)"
+                        " for {} but got a {}."
+                        .format(self.core.settings.path, 'operations',
+                                type(operations).__name__)
+                    )
+                keys = sorted(operations.keys())
+                for key in keys:
+                    panel.add_operation(key, operations[key])
 
     def _add_log_container(self, container):
         # container.padding = "3 3 12 12"
@@ -201,7 +274,12 @@ class BackupNowFrame(ttk.Frame):
         logger.warning("Stopping service...")
         if self.icon:
             self.icon.title = "Stopping service..."
-        self.core.stop_sync()
+        try:
+            self.core.stop_sync()
+        except Exception as ex:
+            # Core didn't initialize correctly.
+            echo0('[_stop_service] {}: {}'
+                  .format(type(ex).__name__, ex))
         # Warning, if after is still scheduled,
         # destroy (doing things after destroy?)
         # may cause "Fatal Python error: PyEval_RestoreThread:
@@ -248,7 +326,6 @@ class BackupNowFrame(ttk.Frame):
             # icon=create_image(64, 64, 'black', 'white'),
             icon=load_image(icon_path),
             # menu=generate_menu(),
-
         )
         # ^ Trying to use PhotoImage somehow results in:
         # "AttributeError: 'PhotoImage' object has no attribute

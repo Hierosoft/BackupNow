@@ -11,6 +11,7 @@ checked.
 import argparse
 import copy
 import os
+import sched
 import socket
 import sys
 import threading
@@ -121,6 +122,7 @@ class BackupNow:
     """
     default_backup_name = "default_backup"
     default_settings_path = get_sysdir_sub('LOCALAPPDATA', "settings.json")
+    TIMER_JOB_NAME = "timer"
 
     def __init__(self):
         self.settings = None
@@ -131,6 +133,8 @@ class BackupNow:
         self.busy = 0
         self.errors = []
         self.threads = {}
+        self.scheduler = sched.scheduler(time.time, time.sleep)
+        self.run_level = 1
 
     @property
     def jobs(self):
@@ -288,9 +292,10 @@ class BackupNow:
                 " (`withdraw` prevents `after`)!")
             self.run_tk_timer()
         else:
-            logger.debug(
-                "There is no tk timer, "
-                "so you must keep running run_tasks manually.")
+            # logger.debug(
+            #     "There is no tk timer, "
+            #     "so you must keep running run_tasks manually.")
+            self.run_timer()
         return results
 
     def _add_default_timerdict(self):
@@ -322,12 +327,34 @@ class BackupNow:
         """Stop synchronously
         (wait until threads are cancelled before return)
         """
+        self.run_level = 0
+        # TODO: Respect run_level to allow canceling jobs.
+        wait_time = 1
+        max_wait_time = 20
+        while self.threads:
+            keys = list(self.threads.keys())
+            alive_keys = []
+            for key in keys:
+                if not self.threads[key].is_alive():
+                    logger.warning(
+                        "Warning: stop_sync is removing orphaned thread {}"
+                        .format(key))
+                    del self.threads[key]
+                else:
+                    alive_keys.append(key)
+            if self.threads:
+                logger.warning(
+                    "Waiting {}s for {}"
+                    .format(wait_time, alive_keys))
+                time.sleep(wait_time)
+                wait_time += 2
+                if wait_time > max_wait_time:
+                    wait_time = max_wait_time
         return True
 
     def start_job(self, job_name, job, progress_cb=None):
         if not progress_cb:
             raise ValueError("Set the progress_cb to a method.")
-        # FIXME: Finish this
         thread = None
         event = {}
         if job_name in self.threads:
@@ -348,6 +375,7 @@ class BackupNow:
             args=(job_name, job),
             kwargs={'progress_cb': progress_cb},
         )
+        self.threads[job_name] = thread
         thread.start()
         return event
 
@@ -371,13 +399,59 @@ class BackupNow:
         if self.error_cb:
             self.error_cb(error)
 
+    def run_timer_sync(self, job_name=None):
+        """Run the timer.
+
+        Args:
+            job_name (str, optional): Set this to
+                BackupNow.TIMER_JOB_NAME if running as a thread in
+                self.threads. When the loop terminates, the entry in
+                self.threads will be deleted. Defaults to None.
+        """
+        while self.run_level > 0:
+            # NOTE: There is also schedule (from pypi,
+            #   as opposed to Python's scheduler) used as follows:
+            #   schedule.every(10).seconds.do(run_threaded, job)
+            self.on_timer()
+        if job_name:
+            if job_name in self.threads:
+                del self.threads[job_name]
+
+    def run_timer(self):
+        job_name = BackupNow.TIMER_JOB_NAME
+        thread = None
+        if job_name in self.threads:
+            thread = self.threads[job_name]
+            if not thread or not thread.is_alive():
+                logger.warning("Discarding orphaned thread name={}"
+                               .format(job_name))
+                del self.threads[job_name]
+                thread = None
+        if thread is not None:
+            event = {
+                'error': "{} is already running.".format(job_name),
+                'status': "done",  # Since this instance is done
+            }
+            return event
+        thread = threading.Thread(
+            target=self.run_timer_sync,
+            # args=(job_name, job),
+            kwargs={'job_name': job_name},
+        )
+
     def run_tk_timer(self):
-        self.tk.after(10000, self.run_tk_timer)
+        raise DeprecationWarning(
+            "This method is useless since the Tk window must be open"
+            " for timer events to run.")
+        # self.tk.after(10000, self.run_tk_timer)
+        # self.on_timer()
+
+    def on_timer(self):
         if self.busy:
-            logger.warning("tk timer event: busy")
+            logger.warning("on_timer: busy")
             return
         else:
-            logger.warning("tk timer event: run_tasks...")
+            logger.warning("on_timer: run_tasks...")
         self.busy = True
         self.error = None
         # try:

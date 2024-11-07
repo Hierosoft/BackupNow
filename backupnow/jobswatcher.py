@@ -14,9 +14,13 @@ logger = getLogger(__name__)
 class JobsWatcher:
     """Manage batch jobs and mark timers complete when done.
 
+    Only timers that are ready to run should be added before calling
+    start (threaded) or run_sync (synchronous).
+
     Attributes:
         core (BackupNow): The main process containing .settings['jobs'].
-        timer_jobs (dict[dict[list[dict]]]): Job dictionaries list for each timer name.
+        timer_jobs (dict[dict[list[dict]]]): Job dictionaries list for
+            each timer name.
         timers (dict[TMTimer]): Named timer objects from TaskScheduler.
 
     Args:
@@ -37,19 +41,20 @@ class JobsWatcher:
         self.error = None
         self._job_names = None
 
-    def start(self):
+    def collect_jobs(self):
         self._clear_jobs()
         for name, timer in self.timers.items():
             self._add_timer_jobs(name, timer)
+
+    def start(self):
+        self.collect_jobs()
         self._start_jobs_multithreaded()
 
     def job_names(self):
         return self._job_names
 
     def run_sync(self):
-        self._clear_jobs()
-        for name, timer in self.timers.items():
-            self._add_timer_jobs(name, timer)
+        self.collect_jobs()
         return self.run_jobs_sync()
 
     def add_timer(self, name, timer):
