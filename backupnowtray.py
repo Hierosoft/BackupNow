@@ -175,12 +175,11 @@ class BackupNowFrame(ttk.Frame):
         container = self.jobs_panel.interior
         if self.jobs:
             for job in self.jobs:
-                # job.grid_forget()
-                job.pack_forget()
+                job.grid_forget()
             self.jobs = []
         self.jobs_header_rows = 0
         self.jobs_label = ttk.Label(container, text=self.core.settings.path)
-        self.jobs_label.pack(side=tk.TOP)
+        self.jobs_label.grid(row=self.jobs_header_rows, column=0, columnspan=8)
         self.jobs_header_rows += 1
         self.jobs_row = self.jobs_header_rows
         jobs = self.core.settings.get('jobs')
@@ -195,9 +194,10 @@ class BackupNowFrame(ttk.Frame):
             )
         for job_name, job in jobs.items():
             # job is a dict containing "operations" key pointing to a list
-            panel = JobTk(container)
+            panel = JobTk(container, self.jobs_row)
+            self.jobs.append(panel)
             panel.set_name(job_name)
-            panel.pack(side=tk.TOP, fill=tk.X, expand=True)
+            # panel.pack(side=tk.TOP, fill=tk.X, expand=True)  # it packs now
             operations = job.get('operations')
             enabled = job.get('enabled')
             if enabled is None:
@@ -213,6 +213,7 @@ class BackupNowFrame(ttk.Frame):
                     )
                 for key, operation in enumerate(operations):
                     panel.add_operation(key, operation)
+            self.jobs_row = panel.row
 
     def _add_log_container(self, container):
         # container.padding = "3 3 12 12"

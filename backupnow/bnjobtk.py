@@ -28,33 +28,54 @@ class OperationInfo:  # (tk.Frame):
         self.widgets = {}
 
 
-class JobTk(ttk.Frame):
-    def __init__(self, *args, **kwargs):
-        # kwargs['bg'] = "white"
-        ttk.Frame.__init__(self, *args, **kwargs)
-        # self.name_v = tk.StringVar(self)
-        self.columnconfigure(0, weight=3)
-        self.columnconfigure(1, weight=1)
-        self.columnconfigure(2, weight=1)
-        self.columnconfigure(3, weight=1)
-        self.columnconfigure(4, weight=1)
+class JobTk:  # (ttk.Frame):
+    # def __init__(self, *args, **kwargs):
+    # ttk.Frame.__init__(self, *args, **kwargs)
+
+    def __init__(self, parent, parent_row):
+        self.row = parent_row
+        container = parent  # self
+        self.container = container
+        # self.name_v = tk.StringVar(container)
+        container.columnconfigure(0, weight=0)  # 0: fixed size
+        container.columnconfigure(1, weight=3)
+        container.columnconfigure(2, weight=1)
+        container.columnconfigure(3, weight=1)
+        container.columnconfigure(4, weight=1)
+        self.columns = {
+            'enabled': 0,
+            'name': 1,
+            'progress': 2,
+            'run': 3,
+        }
         self.name = None
-        self.name_label = ttk.Label(self, anchor=tk.W)
-        self.enabled_v = tk.BooleanVar(self)
-        self.enabled_cb = ttk.Checkbutton(self, onvalue=True, offvalue=False,
-                                          variable=self.enabled_v,
+        self.widgets = {}
+        self.widgets['name'] = ttk.Label(container, anchor=tk.W)
+        self.enabled_v = tk.BooleanVar(container)
+        self.widgets['enabled'] = ttk.Checkbutton(
+            container,
+            onvalue=True,
+            offvalue=False,
+            variable=self.enabled_v,
+            state=tk.DISABLED
+        )
+        self.widgets['edit'] = ttk.Button(container, text="Edit",
                                           state=tk.DISABLED)
-        self.edit_button = ttk.Button(self, text="Edit", state=tk.DISABLED)
-        self.run_button = ttk.Button(self, text="Run", state=tk.DISABLED)
-        self.progressbar = ttk.Progressbar(self)
-        self.enabled_cb.grid(column=0, row=0, sticky=tk.W)
-        self.name_label.grid(column=1, row=0, sticky=tk.NSEW)
-        # self.edit_button.grid(column=2, row=0)
-        self.progressbar.grid(column=2, row=0, sticky=tk.W)
-        self.run_button.grid(column=3, row=0, sticky=tk.E)
+        self.widgets['run'] = ttk.Button(container, text="Run",
+                                         state=tk.DISABLED)
+        self.widgets['progress'] = ttk.Progressbar(container)
+        self.widgets['enabled'].grid(column=self.columns['enabled'],
+                                     row=self.row, sticky=tk.W)
+        self.widgets['name'].grid(column=self.columns['name'],
+                                  row=self.row, sticky=tk.NSEW)
+        # self.widgets['edit'].grid(column=2, row=self.row)
+        self.progress_kwargs = {'sticky': tk.EW}
+        self.widgets['progress'].grid(column=self.columns['progress'],
+                                      row=self.row, **self.progress_kwargs)
+        self.widgets['run'].grid(column=self.columns['run'],
+                                 row=self.row, sticky=tk.W)
         self.header_rows = 1
-        self.columns = 4
-        self.row = self.header_rows
+        self.row += self.header_rows
         self.op_groups = {}
 
     def set_enabled(self, enabled):
@@ -62,7 +83,7 @@ class JobTk(ttk.Frame):
         # else: self.enabled_cb.deselect()
         state = tk.NORMAL if enabled else tk.DISABLED
         self.enabled_v.set(enabled)
-        self.run_button.config(state=state)
+        self.widgets['run'].config(state=state)
 
     def get_enabled(self):
         # self.enabled_cb.invoke()
@@ -70,6 +91,7 @@ class JobTk(ttk.Frame):
         return self.enabled_v.get()
 
     def add_operation(self, key, operation):
+        container = self.container  # self
         group = OperationInfo()
         if key in self.op_groups:
             raise KeyError("{} is already in op_groups for the {} job."
@@ -78,25 +100,35 @@ class JobTk(ttk.Frame):
         source = operation.get('source')
         if not source:
             source = "(source not set)"
-        group.widgets['source'] = ttk.Label(self, text=source)
-        group.widgets['source'].grid(column=0, columnspan=self.columns-2,
-                                     row=self.row)
+        group.widgets['source'] = ttk.Label(container, text=source)
+        group.widgets['source'].grid(column=self.columns['name'],
+                                     # columnspan=len(self.columns)-2,
+                                     row=self.row, sticky=tk.EW)
         # self.row += 1
         ran = operation.get('ran')
         if not ran:
             ran = "Last run: Never"
         # NOTE: "ran" is typically handled by tasks, this "ran" is only
         #   for reference
-        group.widgets['progress'] = ttk.Progressbar(self)
-        group.widgets['progress'].grid(column=self.columns-2, row=self.row)
-        group.widgets['ran'] = ttk.Label(self, text=ran)
-        group.widgets['ran'].grid(column=self.columns-1, row=self.row)
+        group.widgets['progress'] = ttk.Progressbar(container)
+        group.widgets['progress'].grid(column=self.columns['progress'],
+                                       row=self.row,
+                                       **self.progress_kwargs)
+        group.widgets['ran'] = ttk.Label(container, text=ran)
+        group.widgets['ran'].grid(column=self.columns['run'], row=self.row)
         self.row += 1
         self.op_groups[key] = group
 
+    def grid_forget(self):
+        for group in self.op_groups:
+            for _, widget in group.widgets.items():
+                widget.grid_forget()
+        for _, widget in self.widgets.items():
+            widget.grid_forget()
+
     def set_name(self, name):
         self.name = name
-        self.name_label.config(text=name)
+        self.widgets['name'].config(text=name)
 
     def set_progress(self, ratio, operation_key=None):
         """Set the progress bar.
@@ -107,7 +139,7 @@ class JobTk(ttk.Frame):
                 progress bar for the operation. Defaults to None
                 (to use the overall progress bar).
         """
-        progressbar = self.progressbar
+        progressbar = self.widgets['progress']
         if operation_key is not None:
             progressbar = self.op_groups.widgets['progress']
 
