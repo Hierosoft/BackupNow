@@ -204,16 +204,15 @@ class BackupNowFrame(ttk.Frame):
                 enabled = True
             panel.set_enabled(enabled)
             if enabled and operations:
-                if not hasattr(operations, 'items'):
+                if hasattr(operations, 'items'):
                     raise TypeError(
-                        "File \"{}\": Expected a dict (with sortable keys)"
+                        "File \"{}\": Expected a list"
                         " for {} but got a {}."
                         .format(self.core.settings.path, 'operations',
                                 type(operations).__name__)
                     )
-                keys = sorted(operations.keys())
-                for key in keys:
-                    panel.add_operation(key, operations[key])
+                for key, operation in enumerate(operations):
+                    panel.add_operation(key, operation)
 
     def _add_log_container(self, container):
         # container.padding = "3 3 12 12"
