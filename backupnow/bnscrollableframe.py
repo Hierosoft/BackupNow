@@ -16,22 +16,10 @@ else:
     import ttk  # type: ignore
     import tkMessageBox as messagebox  # noqa:F401 #type:ignore
 
-try:  # Python 2
-    import tkinter as tk
-    import tkinter.ttk as ttk
-    from tkinter.constants import *
-except ImportError:  # Python 2
-    import Tkinter as tk
-    import ttk
-    from tkinter.constants import *
-
-
-# Based on
-#   https://web.archive.org/web/20170514022131id_/http://tkinter.unpythonic.net/wiki/VerticalScrolledFrame
 
 class VerticalScrolledFrame(ttk.Frame):
     """A pure Tkinter scrollable frame that actually works!
-    * Use the 'interior' attribute to place widgets inside the scrollable frame.
+    * Use the 'interior' attribute to place widgets inside
     * Construct and pack/place/grid normally.
     * This frame only allows vertical scrolling.
     """
@@ -39,11 +27,11 @@ class VerticalScrolledFrame(ttk.Frame):
         ttk.Frame.__init__(self, parent, *args, **kw)
 
         # Create a canvas object and a vertical scrollbar for scrolling it.
-        vscrollbar = ttk.Scrollbar(self, orient=VERTICAL)
-        vscrollbar.pack(fill=Y, side=RIGHT, expand=FALSE)
+        vscrollbar = ttk.Scrollbar(self, orient=tk.VERTICAL)
+        vscrollbar.pack(fill=tk.Y, side=tk.RIGHT, expand=tk.FALSE)
         canvas = tk.Canvas(self, bd=0, highlightthickness=0,
                            yscrollcommand=vscrollbar.set)
-        canvas.pack(side=LEFT, fill=BOTH, expand=TRUE)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=tk.TRUE)
         vscrollbar.config(command=canvas.yview)
 
         # Reset the view
@@ -53,7 +41,7 @@ class VerticalScrolledFrame(ttk.Frame):
         # Create a frame inside the canvas which will be scrolled with it.
         self.interior = interior = ttk.Frame(canvas)
         interior_id = canvas.create_window(0, 0, window=interior,
-                                           anchor=NW)
+                                           anchor=tk.NW)
 
         # Track changes to the canvas and frame width and sync them,
         # also updating the scrollbar.
@@ -85,7 +73,8 @@ if __name__ == "__main__":
             # self.label.pack()
             buttons = []
             for i in range(10):
-                buttons.append(ttk.Button(self.frame.interior, text="Button " + str(i)))
+                buttons.append(ttk.Button(self.frame.interior,
+                                          text="Button " + str(i)))
                 buttons[-1].pack()
 
     app = SampleApp()
