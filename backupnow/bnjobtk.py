@@ -46,7 +46,8 @@ class JobTk:  # (ttk.Frame):
             'enabled': 0,
             'name': 1,
             'progress': 2,
-            'run': 3,
+            'ran': 3,
+            'run': 4,
         }
         self.name = None
         self.widgets = {}
@@ -61,6 +62,7 @@ class JobTk:  # (ttk.Frame):
         )
         self.widgets['edit'] = ttk.Button(container, text="Edit",
                                           state=tk.DISABLED)
+        self.widgets['ran'] = ttk.Label(container, text="Ran")
         self.widgets['run'] = ttk.Button(container, text="Run",
                                          state=tk.DISABLED)
         self.widgets['progress'] = ttk.Progressbar(container)
@@ -72,8 +74,16 @@ class JobTk:  # (ttk.Frame):
         self.progress_kwargs = {'sticky': tk.EW}
         self.widgets['progress'].grid(column=self.columns['progress'],
                                       row=self.row, **self.progress_kwargs)
-        self.widgets['run'].grid(column=self.columns['run'],
-                                 row=self.row, sticky=tk.W)
+        self.widgets['ran'].grid(
+            column=self.columns['ran'],
+            row=self.row,
+            # sticky=tk.W,
+        )
+        self.widgets['run'].grid(
+            column=self.columns['run'],
+            row=self.row,
+            # sticky=tk.W,
+        )
         self.header_rows = 1
         self.row += self.header_rows
         self.op_groups = {}
@@ -83,7 +93,7 @@ class JobTk:  # (ttk.Frame):
         # else: self.enabled_cb.deselect()
         state = tk.NORMAL if enabled else tk.DISABLED
         self.enabled_v.set(enabled)
-        self.widgets['run'].config(state=state)
+        self.widgets['ran'].config(state=state)
 
     def get_enabled(self):
         # self.enabled_cb.invoke()
@@ -107,7 +117,7 @@ class JobTk:  # (ttk.Frame):
         # self.row += 1
         ran = operation.get('ran')
         if not ran:
-            ran = "Last run: Never"
+            ran = "Never"
         # NOTE: "ran" is typically handled by tasks, this "ran" is only
         #   for reference
         group.widgets['progress'] = ttk.Progressbar(container)
@@ -115,7 +125,7 @@ class JobTk:  # (ttk.Frame):
                                        row=self.row,
                                        **self.progress_kwargs)
         group.widgets['ran'] = ttk.Label(container, text=ran)
-        group.widgets['ran'].grid(column=self.columns['run'], row=self.row)
+        group.widgets['ran'].grid(column=self.columns['ran'], row=self.row)
         self.row += 1
         self.op_groups[key] = group
 
