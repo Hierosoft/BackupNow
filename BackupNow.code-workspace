@@ -9,7 +9,15 @@
 			"."
 		],
 		"python.testing.unittestEnabled": false,
-		"python.testing.pytestEnabled": true
+		"python.testing.pytestEnabled": true,
+		"cSpell.words": [
+			"backupnow",
+			"bnsysdirs",
+			"LOCALAPPDATA",
+			"luid",
+			"pids",
+			"sysdir"
+		]
 	},
 	"launch": {
 		"version": "0.2.0",
