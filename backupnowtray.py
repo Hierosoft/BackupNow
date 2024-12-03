@@ -360,11 +360,25 @@ def main():
     sibling_pids = []
     for sibling_pid in moreps.get_pids():
         if psutil.pid_exists(sibling_pid):
-            # TODO: In case this is a stale PID from before this boot of
-            #   the OS (though the PID should never be left in thi list
-            #   after this program's exit) maybe see if the
-            #   process.name().lower() contains "python" or "backupnow"
-            #   before assuming it is running.
+            p = psutil.Process(sibling_pid)
+            name = p.name()  # such as "nvWmi64.exe"
+            # print("p.name={}".format(name))  # just python
+            # print("p.exe={}".format(p.exe()))  # just python path
+            cmd = p.cmdline()
+            # ^ list where first is python path, arg is backupnowtray.py path
+            #   - but may not be split correctly. See
+            #     <https://github.com/giampaolo/psutil/issues/1179>.
+            match = False
+            for part in cmd:
+                if "backupnow" in part.lower():
+                    match = True
+            if not match:
+                # The stored pid is from before reboot and longer indicates
+                #   *this* program is running so remove the pid (lock) file:
+                print("Removed stale lock for PID {} (PID now belongs to {})."
+                      .format(sibling_pid, p.exe()))
+                moreps.remove_pid(sibling_pid)
+                continue
             sibling_pids.append(sibling_pid)
         else:
             # The process is not running but must have not removed
