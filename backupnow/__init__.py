@@ -21,7 +21,6 @@ from collections import OrderedDict
 from datetime import datetime, UTC
 import logging
 from logging import getLogger
-from pprint import pformat
 
 if __name__ == "__main__":
     MODULE_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -548,7 +547,7 @@ def main():
                 else:
                     logger.warning(
                         "- skipped (not {})"
-                        .format(pformat(args.backup_name)))
+                        .format(repr(args.backup_name)))
         if args.backup_name:
             timers = matching_timers
     else:
