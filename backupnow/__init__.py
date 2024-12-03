@@ -230,7 +230,11 @@ class BackupNow:
                 settings.load(try_file)
                 # ^ sets settings.path
                 break
-        logger.info("Using {}".format(self.settings.path))
+        if self.settings.path:
+            logger.warning("Using {}".format(self.settings.path))
+        else:
+            self.settings.path = BackupNow.default_settings_path
+            logger.warning("Defaulting to (new) {}".format(self.settings.path))
 
         settings["comment"] = ("detecting folder *and* file prevents copying"
                                " to another mount of the source!!")
