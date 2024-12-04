@@ -45,7 +45,7 @@ del logging
 MODULE_DIR = os.path.dirname(os.path.realpath(__file__))
 ASSETS_DIR = os.path.join(MODULE_DIR, "assets")
 
-THEME_ROOT = os.path.join(ASSETS_DIR, "forestttktheme")
+THEME_ROOT = os.path.join(ASSETS_DIR, "forest-ttk-theme")
 
 SEARCH_DIRS = [
     ASSETS_DIR,
@@ -67,6 +67,7 @@ def find_resource(name):
         sub_path = os.path.join(parent, name)
         if os.path.exists(sub_path):
             return sub_path
+        print("There is no {}".format(sub_path))
     return None
 
 

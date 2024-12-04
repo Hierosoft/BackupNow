@@ -401,6 +401,12 @@ def main():
     BackupNowFrame.my_pid = os.getpid()
     moreps.add_pid(BackupNowFrame.my_pid)
     root = tk.Tk()
+    theme_path = find_resource('forest-light.tcl')
+    if theme_path:
+        pass
+        # root.tk.call('source', theme_path)
+        # ttk.Style().theme_use('forest-light')
+        # TODO: fix slowness before committing uncommented.
     root.title("BackupNow")
 
     frame = BackupNowFrame(root)
