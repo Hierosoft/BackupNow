@@ -1,6 +1,10 @@
+from collections import OrderedDict
 import sys
 
 from logging import getLogger
+
+from backupnow.bnjob import BNJob
+from backupnow.bnlogging import emit_cast
 
 if sys.version_info.major >= 3:
     # from tkinter import *
@@ -28,7 +32,7 @@ class OperationInfo:  # (tk.Frame):
         self.widgets = {}
 
 
-class JobTk:  # (ttk.Frame):
+class JobTk(BNJob):  # (ttk.Frame):
     # def __init__(self, *args, **kwargs):
     # ttk.Frame.__init__(self, *args, **kwargs)
 
@@ -64,7 +68,8 @@ class JobTk:  # (ttk.Frame):
                                           state=tk.DISABLED)
         self.widgets['ran'] = ttk.Label(container, text="Ran")
         self.widgets['run'] = ttk.Button(container, text="Run",
-                                         state=tk.DISABLED)
+                                         state=tk.NORMAL,
+                                         command=self.run)
         self.widgets['progress'] = ttk.Progressbar(container)
         self.widgets['enabled'].grid(column=self.columns['enabled'],
                                      row=self.row, sticky=tk.W)
@@ -84,8 +89,8 @@ class JobTk:  # (ttk.Frame):
             row=self.row,
             # sticky=tk.W,
         )
-        self.header_rows = 1
-        self.row += self.header_rows
+        # self.header_rows = 1
+        # self.row += self.header_rows
         self.op_groups = {}
 
     def set_enabled(self, enabled):
@@ -99,6 +104,20 @@ class JobTk:  # (ttk.Frame):
         # self.enabled_cb.invoke()
         # state = checkbutton.select() == checkbutton.deselect()
         return self.enabled_v.get()
+
+    def run(self):
+        if self.meta.get('enabled') is False:
+            raise RuntimeError("Tried to run job name={} but enabled is False."
+                               .format(repr(self.name)))
+        if self.meta.get('operations') is None:
+            raise ValueError('operations is None for job name={}.'
+                             .format(repr(self.name)))
+        if not isinstance(self.meta['operations'], list):
+            raise TypeError(
+                "Expected list for 'operations' in job name={} but got {}"
+                .format(repr(self.name), emit_cast(self.meta['operations'])))
+        for operation in self.meta['operations']:
+            self._run_operation(operation)  # See superclass
 
     def add_operation(self, key, operation):
         container = self.container  # self
@@ -139,6 +158,27 @@ class JobTk:  # (ttk.Frame):
     def set_name(self, name):
         self.name = name
         self.widgets['name'].config(text=name)
+
+    def set_meta(self, meta):
+        if not isinstance(meta, (dict, OrderedDict)):
+            raise TypeError("Expected dict, got {}"
+                            .format(emit_cast(meta)))
+        if 'enabled' not in meta:
+            logger.warning(
+                "JobTk (name={}): 'enabled' not set (default: True)"
+                .format(repr(self.name)))
+        elif not isinstance(meta['enabled'], bool):
+            raise TypeError("Expected job 'enabled' bool, got {}"
+                            .format(emit_cast(meta['enabled'])))
+        if meta.get('operations') is None:
+            logger.warning(
+                "JobTk (name={}): 'operations' not set (default: [])"
+                .format(repr(self.name)))
+            meta['operations'] = []
+        elif not isinstance(meta['operations'], list):
+            raise TypeError("Expected job 'operations' list, got {}"
+                            .format(emit_cast(meta['operations'])))
+        self.meta = meta
 
     def set_progress(self, ratio, operation_key=None):
         """Set the progress bar.
