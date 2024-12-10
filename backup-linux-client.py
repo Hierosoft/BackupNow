@@ -57,16 +57,12 @@ def best_utc_now():
     return datetime.utcnow()
 
 
-def emit_cast(value):
-    return "{}({})".format(type(value).__name__, repr(value))
-
-
 def copy_preserve(src, dst):
     if os.path.islink(src):
         linkto = os.readlink(src)
         os.symlink(linkto, dst)
     else:
-        shutil.copy(src,dst)
+        shutil.copy(src, dst)
 
 
 def copy_preserve_cmd(src, dst):

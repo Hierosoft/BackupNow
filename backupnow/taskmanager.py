@@ -6,6 +6,8 @@ from datetime import (
 )
 from logging import getLogger
 
+from backupnow.bnlogging import emit_cast
+
 logger = getLogger(__name__)
 
 INDEX_OF_DOW = {  # Day number as in strftime("%w")
@@ -82,8 +84,8 @@ class TMTimer:
     def ran(self, value):
         if not isinstance(value, datetime):
             raise TypeError(
-                "ran should be a datetime, got {}({})"
-                .format(type(value).__name__, value))
+                "ran should be a datetime, got {}"
+                .format(emit_cast(value)))
         if value.tzinfo is None:
             raise ValueError(
                 "value is offset-naive. Set to a UTC time"

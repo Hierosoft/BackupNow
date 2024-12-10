@@ -15,8 +15,11 @@
 			"bnsysdirs",
 			"LOCALAPPDATA",
 			"luid",
+			"offvalue",
+			"onvalue",
 			"pids",
-			"sysdir"
+			"sysdir",
+			"taskmanager"
 		]
 	},
 	"launch": {

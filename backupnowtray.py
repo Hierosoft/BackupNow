@@ -5,6 +5,7 @@ os.environ may not work correctly with setproctitle. See readme.md.
 """
 from __future__ import print_function
 
+from collections import OrderedDict
 import os
 import platform
 import psutil
@@ -100,7 +101,7 @@ class BackupNowFrame(ttk.Frame):
 
     def __init__(self, root):
         ttk.Frame.__init__(self, root)
-        self.jobs = []
+        self.jobs = OrderedDict()
         self.root = root
         self.icon = None
         root.after(0, self._on_form_loading)  # delay iconbitmap
@@ -171,12 +172,18 @@ class BackupNowFrame(ttk.Frame):
             self.set_status(msg)
             raise
 
+    def key_of_job_row(self, index):
+        for key, job in self.jobs.items():
+            if job.row == index:
+                return key
+        return None
+
     def show_jobs(self):
         container = self.jobs_panel.interior
         if self.jobs:
-            for job in self.jobs:
+            for _, job in self.jobs.items():
                 job.grid_forget()
-            self.jobs = []
+            self.jobs.clear()
         self.jobs_header_rows = 0
         self.jobs_label = ttk.Label(container, text=self.core.settings.path)
         self.jobs_label.grid(row=self.jobs_header_rows, column=0, columnspan=8)
@@ -189,14 +196,23 @@ class BackupNowFrame(ttk.Frame):
             return
         if not hasattr(jobs, 'items'):
             raise TypeError(
-                "File \"{}\": Expected a dict for {} but got a {}."
+                "File \"{}\": Expected a dict for '{}' but got a {}."
                 .format(self.core.settings.path, 'jobs', type(jobs).__name__)
             )
         for job_name, job in jobs.items():
             # job is a dict containing "operations" key pointing to a list
+            existing_key = self.key_of_job_row(self.jobs_row)
+            if existing_key:
+                raise IndexError("Row {} was already used for {}."
+                                 .format(self.jobs_row, repr(existing_key)))
             panel = JobTk(container, self.jobs_row)
-            self.jobs.append(panel)
+            if job_name in self.jobs:
+                raise KeyError(
+                    "Each job must have a unique name, but got {} again."
+                    .format(repr(job_name)))
+            self.jobs[job_name] = panel
             panel.set_name(job_name)
+            panel.set_meta(job)
             # panel.pack(side=tk.TOP, fill=tk.X, expand=True)  # it packs now
             operations = job.get('operations')
             enabled = job.get('enabled')
@@ -213,7 +229,7 @@ class BackupNowFrame(ttk.Frame):
                     )
                 for key, operation in enumerate(operations):
                     panel.add_operation(key, operation)
-            self.jobs_row = panel.row
+            self.jobs_row = panel.row + 1
 
     def _add_log_container(self, container):
         # container.padding = "3 3 12 12"
