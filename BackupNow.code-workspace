@@ -12,14 +12,29 @@
 		"python.testing.pytestEnabled": true,
 		"cSpell.words": [
 			"backupnow",
+			"backupnowtray",
+			"bnjobtk",
+			"bnscrollableframe",
 			"bnsysdirs",
+			"columnspan",
+			"fstype",
+			"getpid",
+			"icns",
+			"listdrives",
 			"LOCALAPPDATA",
 			"luid",
+			"moreplatform",
+			"moreps",
+			"mountpoint",
 			"offvalue",
 			"onvalue",
+			"padx",
+			"pady",
 			"pids",
+			"pystray",
 			"sysdir",
-			"taskmanager"
+			"taskmanager",
+			"textvariable"
 		]
 	},
 	"launch": {

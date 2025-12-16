@@ -23,7 +23,7 @@ logger = getLogger(__name__)
 class OperationInfo:  # (tk.Frame):
     """Manage one operation of a job.
 
-    Attribs:
+    Attributes:
         meta (dict): An operation dict from the operations list in
             settings.
     """
@@ -66,7 +66,7 @@ class JobTk(BNJob):  # (ttk.Frame):
         )
         self.widgets['edit'] = ttk.Button(container, text="Edit",
                                           state=tk.DISABLED)
-        self.widgets['ran'] = ttk.Label(container, text="Ran")
+        self.widgets['ran'] = ttk.Label(container, text="Ran:")
         self.widgets['run'] = ttk.Button(container, text="Run",
                                          state=tk.NORMAL,
                                          command=self.run)
