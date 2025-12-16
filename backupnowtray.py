@@ -288,6 +288,7 @@ class BackupNowFrame(ttk.Frame):
 
     def _stop_service(self):
         logger.warning("Stopping service...")
+
         if self.icon:
             self.icon.title = "Stopping service..."
         try:
@@ -310,7 +311,9 @@ class BackupNowFrame(ttk.Frame):
             self.icon.stop()
             self.icon = None
         logger.warning("Stopped.")
-        self.root.destroy()
+        if self.root:
+            self.root.update_idletasks()  # avoid calls to destroyed widgets
+            self.root.destroy()
         self.root = None
         moreps.remove_pid(BackupNowFrame.my_pid)
 

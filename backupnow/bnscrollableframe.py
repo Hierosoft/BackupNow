@@ -27,46 +27,63 @@ class VerticalScrolledFrame(ttk.Frame):
         ttk.Frame.__init__(self, parent, *args, **kw)
 
         # Create a canvas object and a vertical scrollbar for scrolling it.
-        vscrollbar = ttk.Scrollbar(self, orient=tk.VERTICAL)
-        vscrollbar.pack(fill=tk.Y, side=tk.RIGHT, expand=tk.FALSE)
-        canvas = tk.Canvas(self, bd=0, highlightthickness=0,
-                           yscrollcommand=vscrollbar.set)
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=tk.TRUE)
-        vscrollbar.config(command=canvas.yview)
+        self.vscrollbar = ttk.Scrollbar(self, orient=tk.VERTICAL)
+        self.vscrollbar.pack(fill=tk.Y, side=tk.RIGHT, expand=tk.FALSE)
+        self.canvas = tk.Canvas(self, bd=0, highlightthickness=0,
+                                yscrollcommand=self.vscrollbar.set)
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=tk.TRUE)
+        self.vscrollbar.config(command=self.canvas.yview)
 
         # Reset the view
-        canvas.xview_moveto(0)
-        canvas.yview_moveto(0)
+        self.canvas.xview_moveto(0)
+        self.canvas.yview_moveto(0)
 
         # Create a frame inside the canvas which will be scrolled with it.
-        self.interior = interior = ttk.Frame(canvas)
-        interior_id = canvas.create_window(0, 0, window=interior,
-                                           anchor=tk.NW)
+        self.interior = interior = ttk.Frame(self.canvas)
+        interior_id = self.canvas.create_window(0, 0, window=interior,
+                                                anchor=tk.NW)
 
         # Track changes to the canvas and frame width and sync them,
         # also updating the scrollbar.
         def _configure_interior(event):
             # Update the scrollbars to match the size of the inner frame.
             size = (interior.winfo_reqwidth(), interior.winfo_reqheight())
-            canvas.config(scrollregion="0 0 %s %s" % size)
-            if interior.winfo_reqwidth() != canvas.winfo_width():
+            self.canvas.config(scrollregion="0 0 %s %s" % size)
+            if interior.winfo_reqwidth() != self.canvas.winfo_width():
                 # Update the canvas's width to fit the inner frame.
-                canvas.config(width=interior.winfo_reqwidth())
+                self.canvas.config(width=interior.winfo_reqwidth())
         interior.bind('<Configure>', _configure_interior)
 
         def _configure_canvas(event):
-            if interior.winfo_reqwidth() != canvas.winfo_width():
+            if interior.winfo_reqwidth() != self.canvas.winfo_width():
                 # Update the inner frame's width to fill the canvas.
-                canvas.itemconfigure(interior_id, width=canvas.winfo_width())
-        canvas.bind('<Configure>', _configure_canvas)
+                self.canvas.itemconfigure(interior_id, width=self.canvas.winfo_width())
+        self.canvas.bind('<Configure>', _configure_canvas)
+
+    def destroy(self):
+        """
+        Clear bindings/connections to prevent callbacks on destroyed widgets
+        """
+        if hasattr(self, 'interior') and self.interior.winfo_exists():
+            self.interior.unbind('<Configure>')
+        if hasattr(self, 'canvas') and self.canvas.winfo_exists():
+            self.canvas.unbind('<Configure>')
+            self.canvas.configure(yscrollcommand='')
+        if hasattr(self, 'vscrollbar') and self.vscrollbar.winfo_exists():
+            self.vscrollbar.configure(command='')
+        super(VerticalScrolledFrame, self).destroy()
 
 
 if __name__ == "__main__":
 
     class SampleApp(tk.Tk):
         def __init__(self, *args, **kwargs):
-            root = tk.Tk.__init__(self, *args, **kwargs)
-
+            root = self
+            tk.Tk.__init__(self, *args, **kwargs)
+            self.geometry("600x100+100+100")
+            root.title(
+                "You ran the wrong file."
+                " This is just the bnscrollableframe.py demo.")
             self.frame = VerticalScrolledFrame(root)
             self.frame.pack(fill=tk.BOTH)
             # self.label = ttk.Label(self, text="Shrink window for scrollbar.")
