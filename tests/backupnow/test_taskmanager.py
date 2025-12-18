@@ -51,7 +51,7 @@ class TestBackupGoNowCmd(unittest.TestCase):
             "span": "daily",
             "commands": ["*"],
         }
-        timer = TMTimer(timerdict=timerdict)
+        timer = TMTimer(timer_dict=timerdict)
         # delta = timer.time_until(now=now)
         self.assertTrue(timer.due(now=now))
 
@@ -109,7 +109,7 @@ class TestBackupGoNowCmd(unittest.TestCase):
             "day_of_week": int(now.strftime("%w")),
             "commands": ["*"],
         }
-        timer = TMTimer(timerdict=timerdict)
+        timer = TMTimer(timer_dict=timerdict)
         self.assertEqual(
             TMTimer.move_to_day_of_week(ran, timer.day_of_week,
                                         reverse=True),  # reverse N/A here
@@ -126,7 +126,7 @@ class TestBackupGoNowCmd(unittest.TestCase):
             "span": "daily",
             "commands": ["*"],
         }
-        timer = TMTimer(timerdict=timerdict)
+        timer = TMTimer(timer_dict=timerdict)
         delta = timer.time_until(now=now)
         seconds = int(delta.total_seconds())
         minutes = int(seconds/60)
@@ -137,7 +137,7 @@ class TestBackupGoNowCmd(unittest.TestCase):
             "span": "daily",
             "commands": ["*"],
         }
-        timer = TMTimer(timerdict=timerdict)
+        timer = TMTimer(timer_dict=timerdict)
         delta = timer.time_until(now=now)
         seconds = int(delta.total_seconds())
         minutes = int(seconds/60)
@@ -148,7 +148,7 @@ class TestBackupGoNowCmd(unittest.TestCase):
             "span": "daily",
             "commands": ["*"],
         }
-        timer = TMTimer(timerdict=timerdict)
+        timer = TMTimer(timer_dict=timerdict)
         delta = timer.time_until(now=now)
         seconds = int(delta.total_seconds())
         minutes = int(seconds/60)
@@ -156,7 +156,7 @@ class TestBackupGoNowCmd(unittest.TestCase):
 
     def test_validate_time(self):
         timerdict = BackupNow.default_timerdict()  # ["*"] 12:00 daily
-        timer = TMTimer(timerdict=timerdict)
+        timer = TMTimer(timer_dict=timerdict)
         self.assertEqual(
             timer.validate_time("1:32"),
             "01:32"
@@ -228,11 +228,11 @@ class TestBackupGoNowCmd(unittest.TestCase):
         timerdict['time'] = "12:01"
         timerdict['span'] = "weekly"
         timerdict['day_of_week'] = "Thursday"
-        timer = TMTimer(timerdict=timerdict)
+        timer = TMTimer(timer_dict=timerdict)
         # mgr.add_timer(BackupNow.default_backup_name, timer)
         self.assertFalse(timer.due(now=now))
         timerdict['time'] = "12:00"
-        timer = TMTimer(timerdict=timerdict)
+        timer = TMTimer(timer_dict=timerdict)
         self.assertTrue(timer.due(now=now))
 
         delta = timedelta(days=1)
@@ -247,7 +247,7 @@ class TestBackupGoNowCmd(unittest.TestCase):
         timerdict['time'] = "12:01"
         timerdict['span'] = "daily"
         self.run_taskmanager_daily(timerdict=timerdict)
-        timer = TMTimer(timerdict=timerdict)
+        timer = TMTimer(timer_dict=timerdict)
         self.run_taskmanager_daily(timer=timer)
 
     def run_taskmanager_daily(self, timerdict=None, timer=None):
@@ -279,7 +279,7 @@ class TestBackupGoNowCmd(unittest.TestCase):
         # src = self.src
         # tm = TaskManager()
         timerdict = BackupNow.default_timerdict()  # ["*"] 12:00 daily
-        timer = TMTimer(timerdict=timerdict)
+        timer = TMTimer(timer_dict=timerdict)
         now = datetime(year=2024, month=6, day=20, hour=12, minute=0, second=0).replace(tzinfo=UTC)
         later = now + timedelta(seconds=60)
         # now = now - timedelta(seconds=59)

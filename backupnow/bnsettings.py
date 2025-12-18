@@ -11,7 +11,7 @@ class Settings(dict):
 
     def __init__(self):
         dict.__init__(self)
-        self.path = None
+        self.path = None  # type: str|None
 
     def load(self, path=None):
         if not path:

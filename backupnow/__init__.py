@@ -515,7 +515,7 @@ def main():
     enable_multithreading = False
     logger.info("args={}".format(args))
     # prefix = "[main] "
-    core = BackupNow()
+    core = BackupNow()  # type: BackupNow|None
     results = core.start()
     errors = results.get('errors')
     if errors:

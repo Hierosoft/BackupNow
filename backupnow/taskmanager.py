@@ -35,7 +35,7 @@ class TMTimer:
 
     Attributes:
         time (str): Time formatted as time_fmt ("%H:%M").
-        span (str): A timespan for the recurring event ("daily",
+        span (str): A time span for the recurring event ("daily",
             "weekly"). If "weekly", you must set "day_of_week".
         day_of_week (int): Day of week where Sunday is 0 (dow_index_fmt
             "%w"). This is required only when span is "weekly".
@@ -58,7 +58,7 @@ class TMTimer:
     # dow_name_fmt = "%A"  # full name of day of week (first letter capital)
     dow_index_fmt = "%w"  # Number of day of week where Sunday is 0.
 
-    def __init__(self, timerdict=None):
+    def __init__(self, timer_dict=None):
         self.time = None
         self.span = None
         self.commands = None
@@ -71,13 +71,13 @@ class TMTimer:
         self._all_keys = list(self.__dict__.keys())
         self._all_keys.remove("_base_keys")
         # print("keys={}".format(self._base_keys))
-        if timerdict:
-            if not isinstance(timerdict, dict):
+        if timer_dict:
+            if not isinstance(timer_dict, dict):
                 raise ValueError(
                     "Expected dict for timerdict, got {}"
-                    .format(type(timerdict).__name__))
+                    .format(type(timer_dict).__name__))
             # try:
-            self.from_dict(timerdict)
+            self.from_dict(timer_dict)
             # except ValueError as ex:
             #     self.errors.append("{}: {}".format(type(ex).__name__, ex))
 
@@ -482,7 +482,7 @@ class TaskManager:
                 logger.info(
                     prefix+"Loaded \"{}\" timer: {}"
                     .format(name, timerdict))
-                timers[name] = TMTimer(timerdict=timerdict)
+                timers[name] = TMTimer(timer_dict=timerdict)
             # except Exception as ex:
             #     results['errors'].append(
             #         "{}: {}".format(type(ex).__name__, ex))
@@ -508,7 +508,7 @@ class TaskManager:
     def add_timer_dict(self, name, timerdict):
         if name in self.timers:
             raise KeyError("Already has {}".format(name))
-        timer = TMTimer(timerdict=timerdict)
+        timer = TMTimer(timer_dict=timerdict)
         self.timers[name] = timer
 
     def add_timer(self, name, timer):

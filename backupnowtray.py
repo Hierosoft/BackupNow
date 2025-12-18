@@ -116,7 +116,7 @@ class BackupNowFrame(ttk.Frame):
         #  & widget creation until after hiding is complete.
         #  (to prevent flash before withdraw:
         #  https://stackoverflow.com/a/33309424/4541104)
-        self.core = None
+        self.core = None  # type: BackupNow|None
         # root.after(100, self._start)
         self.icon_thread = None
 
@@ -156,7 +156,7 @@ class BackupNowFrame(ttk.Frame):
         if self.core:
             raise RuntimeError("BackupNow core was already initialized.")
         logger.info("Starting core...")
-        self.core = BackupNow()
+        self.core = BackupNow()  # type: BackupNow|None
         self.core.start()  # Do *not* use tk=self.root: "after" skips if closed
         logger.info("Loading settings...")
         self.core.load()
@@ -313,7 +313,7 @@ class BackupNowFrame(ttk.Frame):
         # Python runtime state: initialized"
         # - Seems to be prevented by avoiding
         #   "after" in "_quit".
-        self.core = None
+        self.core = None  # type: BackupNow|None
         if self.icon:
             self.icon.title = "Stopping icon..."
             self.icon.stop()
