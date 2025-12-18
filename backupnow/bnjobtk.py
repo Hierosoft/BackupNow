@@ -89,8 +89,8 @@ class JobTk(BNJob):  # (ttk.Frame):
             row=self.row,
             # sticky=tk.W,
         )
-        # self.header_rows = 1
-        # self.row += self.header_rows
+        self.header_rows = 1
+        self.row += self.header_rows
         self.op_groups = {}
 
     def set_enabled(self, enabled):
