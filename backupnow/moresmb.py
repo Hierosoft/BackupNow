@@ -1,24 +1,39 @@
 from __future__ import print_function
 import os
 import platform
+import re
 import subprocess
 import sys
 
+share_format_rc = re.compile(r'^\\\\[^\\]+\\[^\\]+$')
+
+
+def is_share_format(share):
+    # type (str) -> bool
+    return bool(share_format_rc.match(share))
+
 
 def get_mounted_share(share, user=None, password=None):
+    # type: (str, (str|None), (str|None)) -> str|None
     """Get a mountpoint from a share path
 
     Args:
-        share (_type_): _description_
-        user (_type_, optional): _description_. Defaults to None.
-        password (_type_, optional): _description_. Defaults to None.
+        share (str): Share path such as \\\\SERVER\\Share1 (start with 2
+            backslashes, one and only one thereafter)
+        user (str, optional): User name. Defaults to None.
+        password (str, optional): Password. Defaults to None.
 
     Returns:
         str: Drive path (letter then colon on Windows)
     """
+    assert isinstance(share, str)
+    assert share.startswith("\\\\")
+    assert is_share_format(share), \
+        "Expected \\\\{{SERVER}}\\{{Share}} format, got {}".format(share)
+    share_lower = share.lower()
     for drive in os.listdrives():
         try_path = os.path.realpath(drive)
-        if try_path == share:
+        if try_path.lower() == share_lower:
             print('[get_mounted_share] {} == {}'.format(repr(try_path), repr(share)))
             return drive
         print('[get_mounted_share] {} != {}'.format(repr(try_path), repr(share)))
@@ -26,7 +41,7 @@ def get_mounted_share(share, user=None, password=None):
 
 
 def mount_share(drive, share, user=None, password=None):
-    # type: (str, str, str, str) -> None
+    # type: (str, str, (str|None), (str|None)) -> None
     if (user is None) != (password is None):
         if password:
             password = "*" * len(password)
