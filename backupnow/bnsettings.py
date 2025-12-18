@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import json
 import os
 
@@ -24,7 +25,7 @@ class Settings(dict):
             return False
         logger.info("Loading {}".format(os.path.realpath(path)))
         with open(path, 'r') as stream:
-            meta = json.load(stream)
+            meta = json.load(stream, object_pairs_hook=OrderedDict)
             # Overlay (keep default values if not in file)
             for k, v in meta.items():
                 self[k] = v

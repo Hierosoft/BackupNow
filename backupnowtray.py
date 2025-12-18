@@ -23,8 +23,15 @@ from PIL import (
     ImageTk,
     ImageDraw,
 )
-from setproctitle import setproctitle
-
+try:
+    from setproctitle import setproctitle
+except ImportError:
+    def setproctitle(_):
+        print("setproctitle is not installed.", file=sys.stderr)
+        # TODO: Try multiprocessing library instead (setproctitle
+        #   doesn't seem to work on Windows anyway: name is still
+        #   "Python" in Task Manager)
+        pass
 
 if sys.version_info.major >= 3:
     # from tkinter import *
@@ -100,6 +107,7 @@ class BackupNowFrame(ttk.Frame):
     stay_in_tray = True
 
     def __init__(self, root):
+        # type: (tk.Tk) -> None
         ttk.Frame.__init__(self, root)
         self.jobs = OrderedDict()
         self.root = root
@@ -114,7 +122,7 @@ class BackupNowFrame(ttk.Frame):
 
     def _on_form_loading(self):
         logger.info("Form is loading...")
-        root = self.root
+        root = self.root  # type: tk.Tk
         # root.wm_iconphoto(False, photo)  # 1st arg is "default" children use
         # See also: icon in pystray Icon constructor.
         # root.title("BackupNow")
@@ -366,8 +374,11 @@ class BackupNowFrame(ttk.Frame):
             self.root.protocol('WM_DELETE_WINDOW', self.quit)
 
         # self.icon.run()
-        self.icon_thread = threading.Thread(daemon=True,
-                                            target=lambda: self.icon.run())
+        if sys.version_info.major >= 3:
+            self.icon_thread = threading.Thread(daemon=True,
+                                                target=lambda: self.icon.run())
+        else:
+            self.icon_thread = threading.Thread(target=lambda: self.icon.run())
         self.icon_thread.start()
         # ^ Now icon.stop() should close the thread according to:
         #   - See https://stackoverflow.com/a/77102240/4541104

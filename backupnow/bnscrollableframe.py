@@ -27,9 +27,9 @@ class VerticalScrolledFrame(ttk.Frame):
         ttk.Frame.__init__(self, parent, *args, **kw)
 
         # Create a canvas object and a vertical scrollbar for scrolling it.
-        self.vscrollbar = ttk.Scrollbar(self, orient=tk.VERTICAL)
+        self.vscrollbar = vscrollbar = ttk.Scrollbar(self, orient=tk.VERTICAL)
         self.vscrollbar.pack(fill=tk.Y, side=tk.RIGHT, expand=tk.FALSE)
-        self.canvas = tk.Canvas(self, bd=0, highlightthickness=0,
+        self.canvas = canvas = tk.Canvas(self, bd=0, highlightthickness=0,
                                 yscrollcommand=self.vscrollbar.set)
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=tk.TRUE)
         self.vscrollbar.config(command=self.canvas.yview)
@@ -46,9 +46,10 @@ class VerticalScrolledFrame(ttk.Frame):
         # Track changes to the canvas and frame width and sync them,
         # also updating the scrollbar.
         def _configure_interior(event):
+            # type: (tk.Event) -> None
             # Update the scrollbars to match the size of the inner frame.
             size = (interior.winfo_reqwidth(), interior.winfo_reqheight())
-            self.canvas.config(scrollregion="0 0 %s %s" % size)
+            self.canvas.config(scrollregion=(0, 0, size[0], size[1]))
             if interior.winfo_reqwidth() != self.canvas.winfo_width():
                 # Update the canvas's width to fit the inner frame.
                 self.canvas.config(width=interior.winfo_reqwidth())

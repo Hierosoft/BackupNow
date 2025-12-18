@@ -1,9 +1,17 @@
+from __future__ import print_function
+import sys
 from datetime import (
     datetime,
     timedelta,
-    timezone,
-    UTC,
 )
+
+from backupnow.bncommon import best_utc_now
+if sys.version_info.major >= 3:
+    from datetime import (
+        timezone,
+        UTC,
+    )
+
 from logging import getLogger
 
 from backupnow.bnlogging import emit_cast
@@ -173,7 +181,7 @@ class TMTimer:
                 negative.
         """
         if now is None:
-            now = datetime.now(UTC)
+            now = best_utc_now()
             # ^ formerly datetime.utcnow()
         self.time = self.validate_time(self.time)
         next_dt = self.utc_datetime(what_day=now)
@@ -202,7 +210,7 @@ class TMTimer:
             datetime: A combination of what_day and self.time.
         """
         if what_day is None:
-            what_day = datetime.now(UTC)
+            what_day = best_utc_now()
             # ^ formerly datetime.utcnow()
         date_str = what_day.strftime(TMTimer.date_fmt)
         return datetime.strptime(
@@ -243,7 +251,7 @@ class TMTimer:
         # return delta.total_seconds() <= 0.0
         # ^ Doesn't really work since may be wrong day...so:
         if now is None:
-            now = datetime.now(UTC)
+            now = best_utc_now()
             # ^ formerly datetime.utcnow()
         self.validate_time(self.time)
         span = self.span
@@ -340,7 +348,11 @@ class TMTimer:
             # timerdict['ran'] = self.ran.strftime(TMTimer.dt_fmt)
             # ran_utc = self.ran.replace(tzinfo=timezone.utc)  # does nothing
             # timerdict['ran'] = ran_utc.strftime(TMTimer.dt_fmt)
-            timerdict['ran'] = self.ran.timestamp()
+            if sys.version_info.major >= 3:
+                timerdict['ran'] = self.ran.timestamp()
+            else:
+                import calendar
+                timerdict['ran'] = calendar.timegm(self._ran.utctimetuple()) + self._ran.microsecond / 1000000.0
             # .timestamp()
         return timerdict
 
@@ -409,7 +421,11 @@ class TMTimer:
             self.enabled = True
         if 'ran' in timerdict:
             # self._ran = datetime.strptime(timerdict['ran'], TMTimer.dt_fmt)
-            self._ran = datetime.fromtimestamp(timerdict['ran'], UTC)
+            if sys.version_info.major >= 3:
+                self._ran = datetime.fromtimestamp(timerdict['ran'], UTC)
+            else:
+                self._ran = datetime.fromtimestamp(timerdict['ran'])
+                # returns timezone-naive datetime object in Python 2
         if self.day_of_week:
             if isinstance(self.day_of_week, str):
                 dow_index = INDEX_OF_DOW.get(self.day_of_week.title())
@@ -481,7 +497,7 @@ class TaskManager:
 
     def get_ready_timers(self, now=None):
         if now is None:
-            now = datetime.now(UTC)
+            now = best_utc_now()
             # ^ formerly datetime.utcnow()
         results = {}
         for name, timer in self.timers.items():

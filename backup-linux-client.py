@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+from __future__ import print_function
 import git
 import os
 import shlex
@@ -49,12 +49,6 @@ date_fmt = "%Y-%m-%d"
 dt_fmt = date_fmt + " " + time_fmt
 # TODO: use static time_fmt, date_fmt, and dt_fmt
 #   from backupnow.taskmanager.TMTimer
-
-
-def best_utc_now():
-    if sys.version_info.major >= 3:
-        return datetime.now(timezone.utc)
-    return datetime.utcnow()
 
 
 def copy_preserve(src, dst):

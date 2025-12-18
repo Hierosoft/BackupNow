@@ -8,6 +8,7 @@ You should have a copy of the license.txt file, otherwise see
 If using the CLI, run frequently so that scheduled events can be
 checked.
 '''
+from __future__ import print_function
 import argparse
 import copy
 import os
@@ -18,7 +19,12 @@ import threading
 import time
 
 from collections import OrderedDict
-from datetime import datetime, UTC
+from datetime import datetime
+if sys.version_info.major >= 3:
+    from datetime import timezone  # , UTC
+# else:
+#     UTC = None
+
 import logging
 from logging import getLogger
 
@@ -36,6 +42,7 @@ from backupnow.bnsysdirs import (
     get_sysdir_sub,
 )
 from backupnow.jobswatcher import JobsWatcher
+from backupnow.bncommon import best_utc_now
 
 logger = getLogger(__name__)
 # logger.setLevel(INFO)  # does nothing since there are no handlers.
@@ -53,7 +60,6 @@ SEARCH_DIRS = [
     os.path.join(THEME_ROOT, "forest-light"),
     os.path.join(THEME_ROOT, "forest-dark"),
 ]
-
 
 def echo0(*args, **kwargs):
     kwargs['file'] = sys.stderr
@@ -287,6 +293,7 @@ class BackupNow:
             )
 
             # self.tm = TaskManager()
+        # tm is set by serialize_timers or deserialize_timers:
         logger.info("[BackupNow start] tm={}".format(self.tm.to_dict()))
         self.tk = tk
         self.busy = False
@@ -393,7 +400,7 @@ class BackupNow:
         return event
 
     def run_tasks(self):
-        tmtasks = self.tm.get_ready_timers(datetime.now(UTC))
+        tmtasks = self.tm.get_ready_timers(best_utc_now())
         # ^ formerly datetime.utcnow()
         if not tmtasks:
             self.show_error("There are no tasks scheduled.")
@@ -515,8 +522,7 @@ def main():
         logger.error("BackupNow start errors:")
         for error in errors:
             logger.error("- {}".format(error))
-
-    now = datetime.now(UTC)
+    now = best_utc_now()
     logger.info("now_utc={}".format(now.strftime(TMTimer.dt_fmt)))
     # ^ main itself is too frequent--Don't use warning or higher importance.
     timers = core.tm.get_ready_timers()

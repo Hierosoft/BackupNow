@@ -1,9 +1,8 @@
+from __future__ import print_function
 import os
 import platform
 import subprocess
 import sys
-
-from backupnow.bnplatform import listdrives
 
 
 def get_mounted_share(share, user=None, password=None):

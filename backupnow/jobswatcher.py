@@ -1,9 +1,9 @@
 import copy
 
 from collections import OrderedDict
-from datetime import datetime, UTC
 from logging import getLogger
 
+from backupnow.bncommon import best_utc_now
 from backupnow.taskmanager import (
     TMTimer,
 )
@@ -216,7 +216,7 @@ class JobsWatcher:
                         len(self.timers_done),
                         name,
                     ))
-                    now = datetime.now(UTC)
+                    now = best_utc_now()
                     self.timers[name].ran = now
                     self.core.save()
                     logger.info("Time ran was saved for {}.".format(name))
@@ -241,7 +241,7 @@ class JobsWatcher:
             self.timer_jobs[name][job_name][index]['status'] = \
                 event.get('status')
         if event.get('status') == 'done':
-            now = datetime.now(UTC)
+            now = best_utc_now()
             logger.info(
                 "- now={}".format(now.strftime(TMTimer.dt_fmt)))
             # ^ formerly datetime.utcnow()

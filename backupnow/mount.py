@@ -13,7 +13,7 @@ based on:
 
 -oktayacikalin <https://gist.github.com/oktayacikalin/7065927>
 '''
-
+from __future__ import print_function
 import platform
 import sys
 

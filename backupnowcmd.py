@@ -2,7 +2,7 @@
 """
 Manage an rsync operation.
 """
-
+from __future__ import print_function
 import sys
 from backupnow.rsync import RSync
 

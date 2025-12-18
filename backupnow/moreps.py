@@ -1,5 +1,6 @@
 """Store and use additional metadata on running processes beyond psutil.
 """
+from collections import OrderedDict
 import json
 import os
 
@@ -23,7 +24,7 @@ def add_pid(pid, luid=LUID):
     path = pids_path()
     if os.path.isfile(path):
         with open(path, 'r') as stream:
-            data = json.load(stream)
+            data = json.load(stream, object_pairs_hook=OrderedDict)
     if data.get("programs") is None:
         data['programs'] = {}
     if data['programs'].get(luid) is None:
@@ -46,7 +47,7 @@ def remove_pid(pid, luid=LUID):
     path = pids_path()
     if os.path.isfile(path):
         with open(path, 'r') as stream:
-            data = json.load(stream)
+            data = json.load(stream, object_pairs_hook=OrderedDict)
     if data.get("programs") is None:
         return False
     if data['programs'].get(luid) is None:
@@ -70,7 +71,7 @@ def get_process_info(pid, luid=LUID):
     path = pids_path()
     if os.path.isfile(path):
         with open(path, 'r') as stream:
-            data = json.load(stream)
+            data = json.load(stream, object_pairs_hook=OrderedDict)
     if data.get("programs") is None:
         return False
     if data['programs'].get(luid) is None:
@@ -89,7 +90,7 @@ def get_pids(luid=LUID):
     path = pids_path()
     if os.path.isfile(path):
         with open(path, 'r') as stream:
-            data = json.load(stream)
+            data = json.load(stream, object_pairs_hook=OrderedDict)
     if data.get("programs") is None:
         return []
     if data['programs'].get(luid) is None:
