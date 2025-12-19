@@ -29,16 +29,25 @@ class OperationInfo:  # (tk.Frame):
             settings.
     """
     def __init__(self):
-        self.meta = None
+        self.meta = None  # type: dict[str, str]
         self.widgets = {}  # type dict[str, tk.Widget]
 
 
 class JobTk(BNJob):  # (ttk.Frame):
     # def __init__(self, *args, **kwargs):
     # ttk.Frame.__init__(self, *args, **kwargs)
+    columns = {
+        'enabled': 0,
+        'name': 1,  # handled by parent for job, by JobTk for operation
+        'progress': 2,
+        'ran': 3,
+        'run': 4,
+    }
 
-    def __init__(self, parent, parent_row):
+    def __init__(self, parent, parent_row, show=True):
+        assert parent_row is not None
         self.row = parent_row
+        self.first_row = self.row  # type: int
         container = parent  # self
         self.container = container
         # self.name_v = tk.StringVar(container)
@@ -47,16 +56,10 @@ class JobTk(BNJob):  # (ttk.Frame):
         container.columnconfigure(2, weight=1)
         container.columnconfigure(3, weight=1)
         container.columnconfigure(4, weight=1)
-        self.columns = {
-            'enabled': 0,
-            'name': 1,
-            'progress': 2,
-            'ran': 3,
-            'run': 4,
-        }
         self.name = None
         self.widgets = {}  # type: dict[str, ttk.Label|ttk.Checkbutton|ttk.Label|ttk.Progressbar|ttk.Combobox]
-        self.widgets['name'] = ttk.Label(container, anchor=tk.W)
+        # self.widgets['name'] = ttk.Label(container, anchor=tk.W)
+        # self.widgets['name'] = ttk.Combobox(container)
         self.enabled_v = tk.BooleanVar(container)
         self.widgets['enabled'] = ttk.Checkbutton(
             container,
@@ -72,10 +75,14 @@ class JobTk(BNJob):  # (ttk.Frame):
                                          state=tk.NORMAL,
                                          command=self.run)
         self.widgets['progress'] = ttk.Progressbar(container)
+        self.header_rows = 1
+        if show:
+            self.showHeader()
+        self.op_groups = {}  # type: dict[int, OperationInfo]
+
+    def showHeader(self):
         self.widgets['enabled'].grid(column=self.columns['enabled'],
                                      row=self.row, sticky=tk.W)
-        self.widgets['name'].grid(column=self.columns['name'],
-                                  row=self.row, sticky=tk.NSEW)
         # self.widgets['edit'].grid(column=2, row=self.row)
         self.progress_kwargs = {'sticky': tk.EW}  # type: dict[str, str]
         self.widgets['progress'].grid(column=self.columns['progress'],
@@ -90,9 +97,7 @@ class JobTk(BNJob):  # (ttk.Frame):
             row=self.row,
             # sticky=tk.W,
         )
-        self.header_rows = 1
         self.row += self.header_rows
-        self.op_groups = {}  # type: dict[str, OperationInfo]
 
     def set_enabled(self, enabled):
         # if state: self.enabled_cb.select()
@@ -120,48 +125,60 @@ class JobTk(BNJob):  # (ttk.Frame):
         for operation in self.meta['operations']:
             self._run_operation(operation)  # See superclass
 
-    def add_operation(self, key, operation):
+    def add_operation(self, key, operation, show=True):
+        # type: (int, dict[str, str], bool) -> None
         container = self.container  # self
         group = OperationInfo()
         if key in self.op_groups:
             raise KeyError("{} is already in op_groups for the {} job."
                            .format(repr(key), repr(self.name)))
         group.meta = operation
-        source = operation.get('source')
-        if not source:
-            source = "(source not set)"
-        group.widgets['source'] = ttk.Label(container, text=source)
-        group.widgets['source'].grid(column=self.columns['name'],
-                                     # columnspan=len(self.columns)-2,
-                                     row=self.row, sticky=tk.EW)
-        # self.row += 1
-        ran = operation.get('ran')
-        if not ran:
-            ran = "Never"
-        # NOTE: "ran" is typically handled by tasks, this "ran" is only
-        #   for reference
-        group.widgets['progress'] = ttk.Progressbar(container)
-        group.widgets['progress'].grid(column=self.columns['progress'],
-                                       row=self.row,
-                                       **self.progress_kwargs)  # type: ignore
-        group.widgets['ran'] = ttk.Label(container, text=ran)
-        group.widgets['ran'].grid(column=self.columns['ran'], row=self.row)
-        self.row += 1
+        if not show:
+            return
         self.op_groups[key] = group
+        self.showOperation(key)
+
+    def hideOperations(self):
+        for key in self.op_groups:
+            self.hideOperation(key)
+
+    def hideOperation(self, key):
+        if self.row <= self.first_row + 1:
+            raise ValueError(
+                "Tried to hide operation after first row {} but row is {}"
+                .format(self.first_row, self.row))
+        group = self.op_groups[key]  # type: OperationInfo
+        for widget in group.widgets.items():
+            widget.grid_forget()
+        self.row -= 1
+
+    def grid(self):
+        self.showHeader()
+        self.showOperations()
 
     def grid_forget(self):
         for group in self.op_groups.values():
             for _, widget in group.widgets.items():
                 widget.grid_forget()
+            self.row -= 1
+        self.hideHeader()
+
+    def hideHeader(self):
+        if self.row != self.first_row + 1:
+            raise ValueError(
+                "Tried to hide first row {} but row is {}"
+                .format(self.first_row, self.row))
         for _, widget in self.widgets.items():
             widget.grid_forget()
+        self.row -= self.header_rows
 
     def set_name(self, name):
         self.name = name
-        if isinstance(self.widgets['name'], ttk.Combobox):
-            self.widgets['name'].set(name)  # type: ignore
-        else:
-            self.widgets['name'].config(text=name)  # type: ignore
+        # See parent instead (jobsDropdown) for:
+        # if isinstance(self.widgets['name'], ttk.Combobox):
+        #     self.widgets['name'].set(name)  # type: ignore
+        # else:
+        #     self.widgets['name'].config(text=name)  # type: ignore
 
     def set_meta(self, meta):
         if not isinstance(meta, (dict, OrderedDict)):
@@ -220,3 +237,34 @@ class JobTk(BNJob):  # (ttk.Frame):
         ratio = event.get('ratio')
         if ratio:
             self.set_progress(ratio, operation_key=event.get('operation_key'))
+
+    def showOperation(self, key):
+        container = self.container
+        group = self.op_groups[key]
+        operation = group.meta
+        source = operation.get('source')
+        if not source:
+            source = "(source not set)"
+        ran = operation.get('ran')
+        if not ran:
+            ran = "Never"
+        # NOTE: "ran" is typically handled by tasks, so this "ran" is
+        #   only for reference
+        if 'source' not in group.widgets:
+            group.widgets['source'] = ttk.Label(container, text=source)
+        group.widgets['source'].grid(column=self.columns['name'],
+                                     # columnspan=len(self.columns)-2,
+                                     row=self.row, sticky=tk.EW)
+        if 'progress' not in group.widgets:
+            group.widgets['progress'] = ttk.Progressbar(container)
+        group.widgets['progress'].grid(column=self.columns['progress'],
+                                       row=self.row,
+                                       **self.progress_kwargs)  # type: ignore
+        if 'ran' not in group.widgets:
+            group.widgets['ran'] = ttk.Label(container, text=ran)
+        group.widgets['ran'].grid(column=self.columns['ran'], row=self.row)
+        self.row += 1
+
+    def showOperations(self):
+        for key in self.op_groups:
+            self.showOperation(key)

@@ -110,9 +110,9 @@ class BackupNowFrame(ttk.Frame):  # type: ignore
     def __init__(self, root):
         # type: (tk.Tk) -> None
         ttk.Frame.__init__(self, root)
-        self.jobs = OrderedDict()
+        self.jobs = OrderedDict()  # type: OrderedDict[str, JobTk]
         self.root = root
-        self.icon = None
+        self.icon = None  # type: Icon
         root.after(0, self._on_form_loading)  # delay iconbitmap
         #  & widget creation until after hiding is complete.
         #  (to prevent flash before withdraw:
@@ -144,6 +144,8 @@ class BackupNowFrame(ttk.Frame):  # type: ignore
         self.status_label = ttk.Label(self.root, state="readonly",
                                       textvariable=self.status_v)
         self.status_label.grid(row=1, column=0, sticky=tk.EW)
+        self.selected_job_name = None
+        self._populating_jobs = 0
         logger.info("Form loaded.")
         self.set_status("Loaded settings...")
         # root.after(0, self._start)  # "withdraw" seems to prevent this :( so:
@@ -181,11 +183,29 @@ class BackupNowFrame(ttk.Frame):  # type: ignore
             self.set_status(msg)
             raise
 
-    def key_of_job_row(self, index):
-        for key, job in self.jobs.items():
-            if job.row == index:
-                return key
-        return None
+    # def key_of_job_row(self, index):
+    #     for key, job in self.jobs.items():
+    #         if job.row == index:
+    #             return key
+    #     return None
+
+    def onJobSelected(self, event):
+        job_name = event.widget.get()
+        if self._populating_jobs > 0:
+            logger.warning("Selected job while populating, so ignored.")
+            return
+        logger.warning("Selected {}".format(repr(job_name)))
+        if self.selected_job_name is not None:
+            self.jobs[self.selected_job_name].grid_forget()
+
+        self.jobs[job_name].grid()
+        self.selected_job_name = job_name
+
+    def pauseJobSelection(self):
+        self._populating_jobs += 1
+
+    def unpauseJobSelection(self):
+        self._populating_jobs -= 1
 
     def show_jobs(self):
         container = self.jobs_panel.interior
@@ -208,23 +228,42 @@ class BackupNowFrame(ttk.Frame):  # type: ignore
                 "File \"{}\": Expected a dict for '{}' but got a {}."
                 .format(self.core.settings.path, 'jobs', type(jobs).__name__)
             )
+        jobsDropdown = ttk.Combobox(container, state='readonly',
+                                    values=list(jobs.keys()))
+        # ^ 'readonly': no typing, only selecting
+        jobsDropdown.grid(column=JobTk.columns['name'],
+                          # columnspan=len(self.columns)-2,
+                          row=self.jobs_row, sticky=tk.EW)
+        jobsDropdown.bind("<<ComboboxSelected>>", self.onJobSelected)
+        shown_panel = None
         for job_name, job in jobs.items():
+            show = False
             # job is a dict containing "operations" key pointing to a list
-            existing_key = self.key_of_job_row(self.jobs_row)
-            if existing_key:
-                raise IndexError("Row {} was already used for {}."
-                                 .format(self.jobs_row, repr(existing_key)))
-            panel = JobTk(container, self.jobs_row)
+            # existing_key = self.key_of_job_row(self.jobs_row)
+            # if existing_key:
+            #     raise IndexError("Row {} was already used for {}."
+            #                      .format(self.jobs_row, repr(existing_key)))
+            enabled = job.get('enabled')
             if job_name in self.jobs:
                 raise KeyError(
                     "Each job must have a unique name, but got {} again."
                     .format(repr(job_name)))
+            if enabled:
+                if self.selected_job_name is None:
+                    self.selected_job_name = job_name
+                    self.pauseJobSelection()
+                    jobsDropdown.set(job_name)
+                    self.unpauseJobSelection()
+                    show = True
+                    shown_panel = panel
+            panel = JobTk(container, self.jobs_row, show=show)
+            if show:
+                shown_panel = panel
             self.jobs[job_name] = panel
             panel.set_name(job_name)
             panel.set_meta(job)
             # panel.pack(side=tk.TOP, fill=tk.X, expand=True)  # it packs now
             operations = job.get('operations')
-            enabled = job.get('enabled')
             if enabled is None:
                 enabled = True
             panel.set_enabled(enabled)
@@ -237,8 +276,10 @@ class BackupNowFrame(ttk.Frame):  # type: ignore
                                 type(operations).__name__)
                     )
                 for key, operation in enumerate(operations):
-                    panel.add_operation(key, operation)
-            self.jobs_row = panel.row + 1
+                    panel.add_operation(key, operation, show=show)
+        # Only increment at end, since we only show the current one!
+        # if shown_panel:
+        #     self.jobs_row = shown_panel.row + 1
 
     def _add_log_container(self, container):
         # container.padding = "3 3 12 12"
