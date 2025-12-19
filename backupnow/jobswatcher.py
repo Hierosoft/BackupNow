@@ -3,7 +3,8 @@ import copy
 from collections import OrderedDict
 from logging import getLogger
 
-from backupnow.bncommon import best_utc_now
+from backupnow import best_utc_now
+from backupnow.bncore import BackupNow
 from backupnow.taskmanager import (
     TMTimer,
 )
@@ -27,7 +28,7 @@ class JobsWatcher:
         core (BackupNow): The main process containing .settings['jobs'].
     """
     def __init__(self, core):
-        self.core = core
+        self.core = core  # type: BackupNow
         self.timers = OrderedDict()
         self._clear_jobs()
 

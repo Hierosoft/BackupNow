@@ -23,6 +23,8 @@ from PIL import (
     ImageTk,
     ImageDraw,
 )
+
+from backupnow.bncore import BackupNow
 try:
     from setproctitle import setproctitle
 except ImportError:
@@ -47,7 +49,6 @@ from backupnow import (
     echo0,
     find_resource,
     moreps,
-    BackupNow,
 )
 
 from backupnow.bnjobtk import (
@@ -102,7 +103,7 @@ def load_image(path):
     return Image.open(path)
 
 
-class BackupNowFrame(ttk.Frame):
+class BackupNowFrame(ttk.Frame):  # type: ignore
     my_pid = None
     stay_in_tray = True
 
@@ -116,7 +117,7 @@ class BackupNowFrame(ttk.Frame):
         #  & widget creation until after hiding is complete.
         #  (to prevent flash before withdraw:
         #  https://stackoverflow.com/a/33309424/4541104)
-        self.core = None  # type: BackupNow|None
+        self.core = BackupNow()  # type: BackupNow
         # root.after(100, self._start)
         self.icon_thread = None
 
@@ -153,25 +154,25 @@ class BackupNowFrame(ttk.Frame):
         self.status_v.set(msg)
 
     def _start(self):
-        if self.core:
+        if self.core.enabled:
             raise RuntimeError("BackupNow core was already initialized.")
         logger.info("Starting core...")
-        self.core = BackupNow()  # type: BackupNow|None
         self.core.start()  # Do *not* use tk=self.root: "after" skips if closed
+        # ^ Sets self.core.enabled = True
         logger.info("Loading settings...")
         self.core.load()
         if self.core.errors:
             logger.error("[_start] load errors:")
             for error in self.core.errors:
                 logger.error("[_start] - {}".format(error))
-            self.core.errors = []
+            del self.core.errors[:]
         logger.info("Saving settings...")
         self.core.save()
         if self.core.errors:
             logger.error("[_start] save errors:")
             for error in self.core.errors:
                 logger.error("[_start] - {}".format(error))
-            self.core.errors = []
+            del self.core.errors[:]
         logger.info("Saved settings.")
         try:
             self.show_jobs()
@@ -313,7 +314,7 @@ class BackupNowFrame(ttk.Frame):
         # Python runtime state: initialized"
         # - Seems to be prevented by avoiding
         #   "after" in "_quit".
-        self.core = None  # type: BackupNow|None
+        self.core.disable()
         if self.icon:
             self.icon.title = "Stopping icon..."
             self.icon.stop()

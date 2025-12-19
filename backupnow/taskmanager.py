@@ -5,12 +5,16 @@ from datetime import (
     timedelta,
 )
 
-from backupnow.bncommon import best_utc_now
+from backupnow import best_utc_now
+
 if sys.version_info.major >= 3:
     from datetime import (
         timezone,
         UTC,
     )
+else:
+    # Python 2
+    UTC = None
 
 from logging import getLogger
 
@@ -60,13 +64,13 @@ class TMTimer:
 
     def __init__(self, timer_dict=None):
         self.time = None
-        self.span = None
+        self.span = None  # type: str|None
         self.commands = None
         self._base_keys = list(self.__dict__.keys())
 
         self.enabled = True
-        self._ran = None
-        self.errors = []
+        self._ran = None  # type: datetime
+        self.errors = []  # type: list[str]
         self.day_of_week = None
         self._all_keys = list(self.__dict__.keys())
         self._all_keys.remove("_base_keys")
@@ -213,10 +217,13 @@ class TMTimer:
             what_day = best_utc_now()
             # ^ formerly datetime.utcnow()
         date_str = what_day.strftime(TMTimer.date_fmt)
-        return datetime.strptime(
-            date_str+" "+self.time,
+        dt = datetime.strptime(
+            "{} {}".format(date_str, self.time),
             TMTimer.dt_fmt
-        ).replace(tzinfo=UTC)  # assumes saved as UTC
+        )
+        if UTC is not None:
+            return dt.replace(tzinfo=UTC)  # assumes saved as UTC
+        return dt
 
     def due(self, now=None, ran=None, quiet=True, allow_late=True):
         """If the timer is due.
@@ -452,7 +459,7 @@ class TaskManager:
     """Manage generic timers than can be used for any program.
     """
     def __init__(self):
-        self.timers = {}
+        self.timers = {}  # type: dict[str, TMTimer]
 
     def to_subdict(self, settings, key="taskmanager"):
         settings[key] = self.to_dict()

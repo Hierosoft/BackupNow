@@ -1,7 +1,8 @@
-from collections import OrderedDict
 import sys
 
+from collections import OrderedDict
 from logging import getLogger
+from typing import Dict, Literal, Mapping
 
 from backupnow.bnjob import BNJob
 from backupnow.bnlogging import emit_cast
@@ -29,7 +30,7 @@ class OperationInfo:  # (tk.Frame):
     """
     def __init__(self):
         self.meta = None
-        self.widgets = {}
+        self.widgets = {}  # type dict[str, tk.Widget]
 
 
 class JobTk(BNJob):  # (ttk.Frame):
@@ -54,7 +55,7 @@ class JobTk(BNJob):  # (ttk.Frame):
             'run': 4,
         }
         self.name = None
-        self.widgets = {}
+        self.widgets = {}  # type: dict[str, ttk.Label|ttk.Checkbutton|ttk.Label|ttk.Progressbar|ttk.Combobox]
         self.widgets['name'] = ttk.Label(container, anchor=tk.W)
         self.enabled_v = tk.BooleanVar(container)
         self.widgets['enabled'] = ttk.Checkbutton(
@@ -76,9 +77,9 @@ class JobTk(BNJob):  # (ttk.Frame):
         self.widgets['name'].grid(column=self.columns['name'],
                                   row=self.row, sticky=tk.NSEW)
         # self.widgets['edit'].grid(column=2, row=self.row)
-        self.progress_kwargs = {'sticky': tk.EW}
+        self.progress_kwargs = {'sticky': tk.EW}  # type: dict[str, str]
         self.widgets['progress'].grid(column=self.columns['progress'],
-                                      row=self.row, **self.progress_kwargs)
+                                      row=self.row, **self.progress_kwargs) # type: ignore
         self.widgets['ran'].grid(
             column=self.columns['ran'],
             row=self.row,
@@ -91,14 +92,14 @@ class JobTk(BNJob):  # (ttk.Frame):
         )
         self.header_rows = 1
         self.row += self.header_rows
-        self.op_groups = {}
+        self.op_groups = {}  # type: dict[str, OperationInfo]
 
     def set_enabled(self, enabled):
         # if state: self.enabled_cb.select()
         # else: self.enabled_cb.deselect()
         state = tk.NORMAL if enabled else tk.DISABLED
         self.enabled_v.set(enabled)
-        self.widgets['ran'].config(state=state)
+        self.widgets['ran'].config(state=state) # type: ignore
 
     def get_enabled(self):
         # self.enabled_cb.invoke()
@@ -142,14 +143,14 @@ class JobTk(BNJob):  # (ttk.Frame):
         group.widgets['progress'] = ttk.Progressbar(container)
         group.widgets['progress'].grid(column=self.columns['progress'],
                                        row=self.row,
-                                       **self.progress_kwargs)
+                                       **self.progress_kwargs)  # type: ignore
         group.widgets['ran'] = ttk.Label(container, text=ran)
         group.widgets['ran'].grid(column=self.columns['ran'], row=self.row)
         self.row += 1
         self.op_groups[key] = group
 
     def grid_forget(self):
-        for group in self.op_groups:
+        for group in self.op_groups.values():
             for _, widget in group.widgets.items():
                 widget.grid_forget()
         for _, widget in self.widgets.items():
@@ -157,7 +158,10 @@ class JobTk(BNJob):  # (ttk.Frame):
 
     def set_name(self, name):
         self.name = name
-        self.widgets['name'].config(text=name)
+        if isinstance(self.widgets['name'], ttk.Combobox):
+            self.widgets['name'].set(name)  # type: ignore
+        else:
+            self.widgets['name'].config(text=name)  # type: ignore
 
     def set_meta(self, meta):
         if not isinstance(meta, (dict, OrderedDict)):
@@ -191,7 +195,7 @@ class JobTk(BNJob):  # (ttk.Frame):
         """
         progressbar = self.widgets['progress']
         if operation_key is not None:
-            progressbar = self.op_groups.widgets['progress']
+            progressbar = self.op_groups[operation_key].widgets['progress']
 
         if not ratio:
             return False

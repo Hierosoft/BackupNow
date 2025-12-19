@@ -17,7 +17,7 @@ else:
     import tkMessageBox as messagebox  # noqa:F401 #type:ignore
 
 
-class VerticalScrolledFrame(ttk.Frame):
+class VerticalScrolledFrame(ttk.Frame):  # type: ignore
     """A pure Tkinter scrollable frame that actually works!
     * Use the 'interior' attribute to place widgets inside
     * Construct and pack/place/grid normally.
@@ -77,7 +77,7 @@ class VerticalScrolledFrame(ttk.Frame):
 
 if __name__ == "__main__":
 
-    class SampleApp(tk.Tk):
+    class SampleApp(tk.Tk):  # type: ignore
         def __init__(self, *args, **kwargs):
             root = self
             tk.Tk.__init__(self, *args, **kwargs)

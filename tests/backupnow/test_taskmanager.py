@@ -5,6 +5,8 @@ import unittest
 
 from datetime import datetime, timedelta, UTC
 
+from backupnow.bncore import BackupNow
+
 TEST_SUB_DIR = os.path.dirname(os.path.realpath(__file__))
 
 TEST_DATA_DIR = os.path.join(TEST_SUB_DIR, "data")
@@ -16,7 +18,6 @@ if __name__ == "__main__":
 
 from backupnow import (  # noqa: E402
     echo0,
-    BackupNow,
 )
 
 from backupnow.taskmanager import (  # noqa: E402
@@ -24,8 +25,9 @@ from backupnow.taskmanager import (  # noqa: E402
     TaskManager,
 )
 
-from backupnow.bnsettings import settings  # noqa: E402
-# , Settings
+from backupnow.bnsettings import Settings  # noqa: E402
+
+# settings = Settings()  # See backupnow.settings instead
 
 
 class TestBackupGoNowCmd(unittest.TestCase):
@@ -57,7 +59,7 @@ class TestBackupGoNowCmd(unittest.TestCase):
 
         # This is an edge case! It assumes someone ran it
         #   *before* the scheduled time, which should never happen!
-        #   However, it is still due because it is never sheduled then!
+        #   However, it is still due because it is never scheduled then!
         self.assertTrue(timer.due(now=now, ran=ran))
         day_delta = timedelta(days=1)
         minute_delta = timedelta(minutes=1)
@@ -82,7 +84,7 @@ class TestBackupGoNowCmd(unittest.TestCase):
 
         date_str = early.strftime(TMTimer.date_fmt)
         next_dt = datetime.strptime(
-            date_str+" "+timer.time,
+            "{} {}".format(date_str, timer.time),
             TMTimer.dt_fmt
         )
         # Scheduled time:

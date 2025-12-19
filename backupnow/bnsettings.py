@@ -14,6 +14,7 @@ class Settings(dict):
         self.path = None  # type: str|None
 
     def load(self, path=None):
+        # type: (str|None) -> bool
         if not path:
             if not self.path:
                 raise ValueError("The path for Settings must be set for load.")
@@ -29,6 +30,7 @@ class Settings(dict):
             # Overlay (keep default values if not in file)
             for k, v in meta.items():
                 self[k] = v
+        return True
 
     def save(self, path=None):
         if path:
@@ -37,6 +39,3 @@ class Settings(dict):
             raise ValueError("The path for Settings must be set for save.")
         with open(self.path, 'w') as stream:
             json.dump(self, stream, sort_keys=True, indent=2)
-
-
-settings = Settings()

@@ -43,6 +43,7 @@ except ImportError:
     # Exit with the final exit code
     sys.exit(code)
 
+from backupnow import best_utc_now
 
 time_fmt = "%H:%M"
 date_fmt = "%Y-%m-%d"
@@ -53,8 +54,8 @@ dt_fmt = date_fmt + " " + time_fmt
 
 def copy_preserve(src, dst):
     if os.path.islink(src):
-        linkto = os.readlink(src)
-        os.symlink(linkto, dst)
+        link_dst = os.readlink(src)
+        os.symlink(link_dst, dst)
     else:
         shutil.copy(src, dst)
 
@@ -224,7 +225,7 @@ def backup(source, destination, git_depth=None, recursive=True,
                 print('Error: "{}" is neither a file nor a directory.'
                         .format(sub_path))
     if script_line_count:
-        dt_utc_str = best_utc_now().format(dt_fmt)
+        dt_utc_str = best_utc_now().strftime(dt_fmt)
         append_to_file(link_script_path, "# done {}".format(dt_utc_str))
 
 def backup_all(backups, remote_host, slash_remote):
@@ -289,7 +290,7 @@ def check_repo(repo_path):
         if repo.is_dirty(untracked_files=True):
             return True
 
-        # Check for unpushed commits
+        # Check for not-yet-pushed commits
         if repo.remotes:
             remote = repo.remotes[0]  # Use the first remote
             # remote.fetch()  # Fetch the latest commits from remote

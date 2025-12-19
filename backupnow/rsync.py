@@ -30,6 +30,7 @@ def echo0(*args, **kwargs):
 
 
 def shlex_quote(value):
+    # type: (str) -> str
     """Mimic shlex_quote from six"""
     if platform.system() == "Windows":
         # For some reason shlex uses single quotes in Windows which fails with
@@ -43,7 +44,7 @@ def shlex_quote(value):
         # requires Python 3.3
         return shlex.quote(value)
     else:
-        import pipes
+        import pipes  # type: ignore
         return pipes.quote(value)
 
 
@@ -93,7 +94,7 @@ class RSync:
     RSYNC_BIN = os.path.join(RSYNC_DIR, "bin", "rsync.exe")
 
     def __init__(self):
-        self.rsync_path = shutil.which("rsync")
+        self.rsync_path = shutil.which("rsync")  # type: str|None
         # ^ `which` requires Python 3.3
         #   (Uses os.environ['PATH'], or falls back to os.defpath)
         if not self.rsync_path:
@@ -167,7 +168,7 @@ class RSync:
         # ^ must add sep to src so rsync doesn't create extra sub-subfolder!
         echo0('Dry run ({}):'.format(cmd))
         my_env = os.environ.copy()
-        RSYNC_BIN_DIR = os.path.dirname(self.rsync_path)
+        RSYNC_BIN_DIR = os.path.dirname(self.rsync_path) # type: ignore
         if platform.system() == "Windows":
             my_env['CWRSYNCHOME'] = os.path.dirname(RSYNC_BIN_DIR)
             working_dir = my_env['CWRSYNCHOME']
@@ -222,7 +223,7 @@ class RSync:
                 # 'rsync' is not recognized as an internal or external command,
                 # operable program or batch file.
 
-            mn = re.findall(r'Number of files: (\d+)', output)
+            mn = re.findall(r'Number of files: (\d+)', output)  # type: ignore
             if mn:
                 total_files = int(mn[0])
                 echo0("total_files={}".format(total_files))

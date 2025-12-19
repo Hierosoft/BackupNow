@@ -6,7 +6,7 @@ from logging import getLogger
 logger = getLogger(__name__)
 LUID = "backupnow"  # Locally-unique id (by "Unix project name" convention)
 
-sysdirs = {}
+sysdirs = {}  # type: dict[str, str]
 if platform.system() == "Windows":
     sysdirs['HOME'] = os.environ['USERPROFILE']
     sysdirs['APPDATA'] = os.environ['APPDATA']
@@ -40,8 +40,8 @@ def get_sysdir_sub(key, leaf=None, luid=LUID):
     will be created if the subfolder does not exist.
 
     Args:
-        key (str): The name of the system directory such as "APPATA",
-            "LOCALAPPATA", or "CACHES".
+        key (str): The name of the system directory such as "APPDATA",
+            "LOCALAPPDATA", or "CACHES".
         leaf (str, optional): Set if you want a subdirectory. Defaults to None.
 
     Returns:

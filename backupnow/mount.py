@@ -20,7 +20,7 @@ import sys
 if platform.system() == "Windows":
     raise SystemError("The mount submodule is not compatible with Windows.")
 
-from gi.repository import Gio, GObject
+from gi.repository import Gio, GObject  # type: ignore
 
 
 # VOLUME_NAME = 'TrekStor'
