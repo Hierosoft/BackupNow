@@ -48,6 +48,7 @@ else:
 from backupnow import (
     echo0,
     find_resource,
+    formatted_ex,
     moreps,
 )
 
@@ -120,6 +121,7 @@ class BackupNowFrame(ttk.Frame):  # type: ignore
         self.core = BackupNow()  # type: BackupNow
         # root.after(100, self._start)
         self.icon_thread = None
+        self.jobPanels = None  # type: OrderedDict[str, JobTk]
 
     def _on_form_loading(self):
         logger.info("Form is loading...")
@@ -130,20 +132,38 @@ class BackupNowFrame(ttk.Frame):  # type: ignore
         root.columnconfigure(0, weight=1)
         root.rowconfigure(0, weight=1)  # Notebook row
         root.rowconfigure(1, weight=0)  # Status label row (fixed height)
+        root.iconbitmap(icon_path)  # top left icon
+        root.wm_iconbitmap(icon_path)
 
+        outer_row = 0
         self.notebook = ttk.Notebook(root)
-        self.notebook.grid(row=0, column=0, sticky=tk.NSEW)
+        self.notebook.grid(row=outer_row, column=0, sticky=tk.NSEW)
         self.jobs_panel = VerticalScrolledFrame(self.notebook)
         self.notebook.add(self.jobs_panel, text="Jobs")
         self.log_panel = ttk.Frame(self.notebook)
         self.notebook.add(self.log_panel, text="Log")  # returns None
         self._add_log_container(self.log_panel)
-        root.iconbitmap(icon_path)  # top left icon
-        root.wm_iconbitmap(icon_path)
+
         self.status_v = tk.StringVar(self.root)
         self.status_label = ttk.Label(self.root, state="readonly",
                                       textvariable=self.status_v)
-        self.status_label.grid(row=1, column=0, sticky=tk.EW)
+        outer_row += 1
+
+        self.destinationPanel = ttk.Frame(root)
+        self.destinationDropdown = ttk.Combobox(
+            self.destinationPanel,
+            # state='readonly',  # only allow select not type
+        )
+        self.destinationLabel = ttk.Label(
+            self.destinationPanel,
+            text="Destination:"
+        )
+        self.destinationLabel.grid(row=0, column=0)
+        self.destinationDropdown.grid(row=0, column=1)
+        self.destinationPanel.grid(row=outer_row)
+        outer_row += 1
+
+        self.status_label.grid(row=outer_row, column=0, sticky=tk.EW)
         self.selected_job_name = None
         self._populating_jobs = 0
         logger.info("Form loaded.")
@@ -151,6 +171,26 @@ class BackupNowFrame(ttk.Frame):  # type: ignore
         # root.after(0, self._start)  # "withdraw" seems to prevent this :( so:
         self._start()
         self.set_status("Loaded settings.")
+        self.updateDriveList()
+
+    def updateDriveList(self):
+        self.destinationDropdown.set('')
+        self.destinationDropdown['values'] = ()
+        self.set_status("Listing drives...")
+        drives = []
+        if platform.system() == "Windows":
+            for drive in os.listdrives():
+                if drive.upper().startswith("C:"):
+                    continue
+                drives.append(drive)
+        else:
+            for drive in os.listdrives():
+                if drive.startswith("/usr"):
+                    continue
+                drives.append(drive)
+        drives.sort()
+        self.destinationDropdown['values'] = drives
+        self.set_status("Done listing drives.")
 
     def set_status(self, msg):
         self.status_v.set(msg)
@@ -228,14 +268,18 @@ class BackupNowFrame(ttk.Frame):  # type: ignore
                 "File \"{}\": Expected a dict for '{}' but got a {}."
                 .format(self.core.settings.path, 'jobs', type(jobs).__name__)
             )
-        jobsDropdown = ttk.Combobox(container, state='readonly',
-                                    values=list(jobs.keys()))
+        self.jobsDropdown = jobsDropdown = ttk.Combobox(
+            container,
+            state='readonly',
+            values=list(jobs.keys())
+        )
         # ^ 'readonly': no typing, only selecting
         jobsDropdown.grid(column=JobTk.columns['name'],
                           # columnspan=len(self.columns)-2,
                           row=self.jobs_row, sticky=tk.EW)
         jobsDropdown.bind("<<ComboboxSelected>>", self.onJobSelected)
         shown_panel = None
+        self.jobPanels = OrderedDict()
         for job_name, job in jobs.items():
             show = False
             # job is a dict containing "operations" key pointing to a list
@@ -256,7 +300,8 @@ class BackupNowFrame(ttk.Frame):  # type: ignore
                     self.unpauseJobSelection()
                     show = True
                     shown_panel = panel
-            panel = JobTk(container, self.jobs_row, show=show)
+            panel = JobTk(container, self.jobs_row, self.onRunButtonClicked,
+                          show=show)
             if show:
                 shown_panel = panel
             self.jobs[job_name] = panel
@@ -277,9 +322,18 @@ class BackupNowFrame(ttk.Frame):  # type: ignore
                     )
                 for key, operation in enumerate(operations):
                     panel.add_operation(key, operation, show=show)
+            self.jobPanels[job_name] = panel
         # Only increment at end, since we only show the current one!
         # if shown_panel:
         #     self.jobs_row = shown_panel.row + 1
+
+    def onRunButtonClicked(self):
+        try:
+            job_name = self.jobsDropdown.get()
+            destination = self.destinationDropdown.get()
+            self.jobPanels[job_name].run_all(destination)
+        except Exception as ex:
+            self.set_status(formatted_ex(ex))
 
     def _add_log_container(self, container):
         # container.padding = "3 3 12 12"

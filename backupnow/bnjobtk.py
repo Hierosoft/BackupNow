@@ -4,6 +4,7 @@ from collections import OrderedDict
 from logging import getLogger
 from typing import Dict, Literal, Mapping
 
+from backupnow import formatted_ex
 from backupnow.bnjob import BNJob
 from backupnow.bnlogging import emit_cast
 
@@ -34,6 +35,17 @@ class OperationInfo:  # (tk.Frame):
 
 
 class JobTk(BNJob):  # (ttk.Frame):
+    """One Job which manages its operations.
+    Args:
+        parent (tk.Widget): Any container.
+        parent_row (int): Row in the container to use (affects self.row
+            on adding row(s) during construction).
+        run_fn (Callable): The function which should run when "Run" is
+            pressed. The caller must keep track of what job is selected and
+            call job.run() during this function.
+        show (bool, optional): Whether to show this job (add widgets).
+            Defaults to True.
+    """
     # def __init__(self, *args, **kwargs):
     # ttk.Frame.__init__(self, *args, **kwargs)
     columns = {
@@ -44,7 +56,7 @@ class JobTk(BNJob):  # (ttk.Frame):
         'run': 4,
     }
 
-    def __init__(self, parent, parent_row, show=True):
+    def __init__(self, parent, parent_row, run_fn, show=True):
         assert parent_row is not None
         self.row = parent_row
         self.first_row = self.row  # type: int
@@ -73,7 +85,7 @@ class JobTk(BNJob):  # (ttk.Frame):
         self.widgets['ran'] = ttk.Label(container, text="Ran:")
         self.widgets['run'] = ttk.Button(container, text="Run",
                                          state=tk.NORMAL,
-                                         command=self.run)
+                                         command=run_fn)
         self.widgets['progress'] = ttk.Progressbar(container)
         self.header_rows = 1
         if show:
@@ -111,7 +123,7 @@ class JobTk(BNJob):  # (ttk.Frame):
         # state = checkbutton.select() == checkbutton.deselect()
         return self.enabled_v.get()
 
-    def run(self):
+    def run_all(self, destination):
         if self.meta.get('enabled') is False:
             raise RuntimeError("Tried to run job name={} but enabled is False."
                                .format(repr(self.name)))
@@ -123,7 +135,7 @@ class JobTk(BNJob):  # (ttk.Frame):
                 "Expected list for 'operations' in job name={} but got {}"
                 .format(repr(self.name), emit_cast(self.meta['operations'])))
         for operation in self.meta['operations']:
-            self._run_operation(operation)  # See superclass
+            self._run_operation(operation, destination)  # See superclass
 
     def add_operation(self, key, operation, show=True):
         # type: (int, dict[str, str], bool) -> None

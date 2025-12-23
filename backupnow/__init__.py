@@ -67,6 +67,10 @@ def find_resource(name):
     return None
 
 
+def formatted_ex(ex):
+    return "{}: {}".format(type(ex).__name__, ex)
+
+
 def getRelPath(root, sub_path):
     if not sub_path.startswith(root):
         raise RuntimeError(
