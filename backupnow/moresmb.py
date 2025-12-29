@@ -5,12 +5,40 @@ import re
 import subprocess
 import sys
 
+from backupnow import ALPHABET_UPPER
+
 share_format_rc = re.compile(r'^\\\\[^\\]+\\[^\\]+$')
+backslash_rc = re.compile(r'\\')
 
 
 def is_share_format(share):
     # type (str) -> bool
     return bool(share_format_rc.match(share))
+
+
+def find_nth_rc(rc: re.Pattern, s: str, n: int = 1) -> int:
+    """Starting index of nth match of the compiled regex in the string.
+
+    Args:
+        rc: Compiled regular expression object (re.Pattern) to find.
+        s: String to search in.
+        n: Which occurrence to find (1-based index). Defaults to 1 (1st)
+
+    Returns:
+        The starting index of the nth match, or -1 if fewer than n
+            matches exist.
+
+    Raises:
+        ValueError: If n is less than 1.
+    """
+    if n < 1:
+        raise ValueError("n must be positive")
+
+    for i, match in enumerate(rc.finditer(s), start=1):
+        if i == n:
+            return match.start()
+
+    return -1
 
 
 def get_mounted_share(share, user=None, password=None):
@@ -31,12 +59,23 @@ def get_mounted_share(share, user=None, password=None):
     assert is_share_format(share), \
         "Expected \\\\{{SERVER}}\\{{Share}} format, got {}".format(share)
     share_lower = share.lower()
-    for drive in os.listdrives():
+    used_drives = list(os.listdrives())
+    for drive in used_drives:
         try_path = os.path.realpath(drive)
         if try_path.lower() == share_lower:
-            print('[get_mounted_share] {} == {}'.format(repr(try_path), repr(share)))
+            print('[get_mounted_share] {} == {}'
+                  .format(repr(try_path), repr(share)))
             return drive
-        print('[get_mounted_share] {} != {}'.format(repr(try_path), repr(share)))
+        print('[get_mounted_share] {} != {}'
+              .format(repr(try_path), repr(share)))
+    if platform.system() == "Windows":
+        for letter in reversed(ALPHABET_UPPER[4:]):
+            mount_path = letter + ":\\"
+            if mount_path in used_drives:
+                continue
+            mount_share(letter + ":", share,
+                        user=user, password=password)
+            return
     return None
 
 
@@ -89,3 +128,18 @@ def mount_share(drive, share, user=None, password=None):
     else:
         raise NotImplementedError("mount_share is not implemented for {}"
                                   .format(platform.system()))
+
+
+def split_share(unc_path):
+    assert unc_path.startswith("\\\\")
+    while unc_path.endswith("\\"):
+        unc_path = unc_path[:-1]
+    count = len(backslash_rc.findall(unc_path))
+    assert count >= 3
+    if count == 3:
+        # Entire unc_path is a share, so do not split.
+        assert is_share_format(unc_path)
+        return (unc_path, "")
+    fourth_backslash_idx = find_nth_rc(backslash_rc, unc_path, n=4)
+    assert fourth_backslash_idx > -1
+    return unc_path[:fourth_backslash_idx], unc_path[fourth_backslash_idx+1:]

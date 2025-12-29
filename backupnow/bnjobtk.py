@@ -123,7 +123,19 @@ class JobTk(BNJob):  # (ttk.Frame):
         # state = checkbutton.select() == checkbutton.deselect()
         return self.enabled_v.get()
 
-    def run_all(self, destination):
+    def run_all(self, destination, **kwargs):
+        try:
+            return self._run_all(destination, **kwargs)
+        except Exception as ex:
+            if 'status_cb' in kwargs:
+                event = {
+                    'error': formatted_ex(ex)
+                }
+                kwargs['status_cb'](event)
+            raise
+
+    def _run_all(self, destination, require_subdirectory=True,
+                 event_template=None, status_cb=None):
         if self.meta.get('enabled') is False:
             raise RuntimeError("Tried to run job name={} but enabled is False."
                                .format(repr(self.name)))
@@ -134,8 +146,15 @@ class JobTk(BNJob):  # (ttk.Frame):
             raise TypeError(
                 "Expected list for 'operations' in job name={} but got {}"
                 .format(repr(self.name), emit_cast(self.meta['operations'])))
+        if not self.meta['operations']:
+            raise TypeError(
+                "'operations' is an empty list in in job name={} but got {}"
+                .format(repr(self.name), emit_cast(self.meta['operations'])))
         for operation in self.meta['operations']:
-            self._run_operation(operation, destination)  # See superclass
+            self._run_operation(operation, destination,
+                                event_template=event_template,
+                                require_subdirectory=require_subdirectory,
+                                status_cb=status_cb)  # See superclass
 
     def add_operation(self, key, operation, show=True):
         # type: (int, dict[str, str], bool) -> None

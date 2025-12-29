@@ -8,6 +8,7 @@ from __future__ import print_function
 from collections import OrderedDict
 import os
 import platform
+import queue
 import psutil
 import pystray  # See https://pystray.readthedocs.io/en/stable/usage.html
 import re
@@ -111,9 +112,10 @@ class BackupNowFrame(ttk.Frame):  # type: ignore
     def __init__(self, root):
         # type: (tk.Tk) -> None
         ttk.Frame.__init__(self, root)
+        self.events = queue.SimpleQueue()
         self.jobs = OrderedDict()  # type: OrderedDict[str, JobTk]
         self.root = root
-        self.icon = None  # type: Icon
+        self.icon = None  # type: pystray.Icon
         root.after(0, self._on_form_loading)  # delay iconbitmap
         #  & widget creation until after hiding is complete.
         #  (to prevent flash before withdraw:
@@ -331,7 +333,32 @@ class BackupNowFrame(ttk.Frame):  # type: ignore
         try:
             job_name = self.jobsDropdown.get()
             destination = self.destinationDropdown.get()
-            self.jobPanels[job_name].run_all(destination)
+            if not destination or not destination.strip():
+                self.set_status("Error: Please choose a destination.")
+                return
+
+            self.set_status("Run all...")
+
+            def run_in_background():
+                try:
+                    self.jobPanels[job_name].run_all(
+                        destination,
+                        event_template={'job_name': job_name},
+                        status_cb=self.status_callback,
+                    )
+                except Exception as ex:
+                    # Update status on the main thread if needed
+                    # Assuming your GUI toolkit allows posting to main thread
+                    # For Tkinter: self.root.after(0,
+                    #     lambda: self.set_status(formatted_ex(ex)))
+                    # For simplicity here, just catch and log/print
+                    print("Error in background run:", formatted_ex(ex))
+                    # If you have a way to safely update UI from thread, use it
+                    # Otherwise, you might need a queue or thread-safe callback
+
+            thread = threading.Thread(target=run_in_background, daemon=True)
+            thread.start()
+
         except Exception as ex:
             self.set_status(formatted_ex(ex))
 
@@ -441,6 +468,27 @@ class BackupNowFrame(ttk.Frame):  # type: ignore
         # icon.run()
         if not self.icon:
             self.tray_icon_main()
+
+    def status_callback(self, event: dict) -> None:
+        self.events.put(event)
+        self.root.after(0, self.process_events)
+
+    def process_events(self):
+        while True:
+            try:
+                event = self.events.get()
+            except queue.Empty:
+                break
+            files_done = event.get('files_done')
+            files_total = event.get('files_total')
+            count_str = "{} / {}".format(files_done, files_total)
+            error = event.get('error')
+            if error:
+                self.set_status("{}".format(error))
+            elif event.get('done'):
+                self.set_status("Done ({})".format(count_str))
+            else:
+                self.set_status("Copying {}...".format(count_str))
 
     def tray_icon_main(self):
         logger.info("Load tray icon...")
