@@ -72,13 +72,13 @@ class JobsWatcher:
         #     job = self.core.settings['jobs'].get(command)
         #     if job is not None:
         #         incomplete_job = copy.deepcopy(job)
-        #         incomplete_job['status'] = None
+        #         incomplete_job['done'] = False
         #         self.timer_jobs[name].append(incomplete_job)
         #     else:
         #         logger.error(
         #             "There is no command={} (expected job name)"
         #             .format(command))
-        #         self.timer_jobs[name].append({'status': "done"})
+        #         self.timer_jobs[name].append({'done': True})
         logger.info("Running timer: {}".format(name))
         event = {}
         for index, command in enumerate(timer.commands):
@@ -120,7 +120,7 @@ class JobsWatcher:
                         event['job_name'] = job_name
                         event['command_index'] = i
                         break
-        event['status'] = "done"
+        event['done'] = True
         if error:
             event['error'] = error
             self.progress(event)
@@ -180,7 +180,7 @@ class JobsWatcher:
             job = {}
         else:
             job = copy.deepcopy(job)
-        job['status'] = None
+        job['done'] = False
         self.timer_jobs[timer_name][job_name].append(job)
 
     def timers_done_count(self):
@@ -204,7 +204,7 @@ class JobsWatcher:
                 for job in jobs:
                     this_count += 1
                     count += 1
-                    if job['status'] == "done":
+                    if job.get('done'):
                         done_count += 1
                         this_done_count += 1
                     else:
@@ -238,10 +238,10 @@ class JobsWatcher:
         if error:
             self.error = error
             logger.error(error)
-        if event.get('status'):
-            self.timer_jobs[name][job_name][index]['status'] = \
-                event.get('status')
-        if event.get('status') == 'done':
+        if 'done' in event:
+            self.timer_jobs[name][job_name][index]['done'] = \
+                event.get('done')
+        if event.get('done'):
             now = best_utc_now()
             logger.info(
                 "- now={}".format(now.strftime(TMTimer.dt_fmt)))

@@ -112,6 +112,7 @@ class BackupNowFrame(ttk.Frame):  # type: ignore
     def __init__(self, root):
         # type: (tk.Tk) -> None
         ttk.Frame.__init__(self, root)
+        self.runningJob = None  # type: JobTk
         self.events = queue.SimpleQueue()
         self.jobs = OrderedDict()  # type: OrderedDict[str, JobTk]
         self.root = root
@@ -122,7 +123,7 @@ class BackupNowFrame(ttk.Frame):  # type: ignore
         #  https://stackoverflow.com/a/33309424/4541104)
         self.core = BackupNow()  # type: BackupNow
         # root.after(100, self._start)
-        self.icon_thread = None
+        self.icon_thread = None  # type: threading.Thread
         self.jobPanels = None  # type: OrderedDict[str, JobTk]
 
     def _on_form_loading(self):
@@ -341,6 +342,8 @@ class BackupNowFrame(ttk.Frame):  # type: ignore
 
             def run_in_background():
                 try:
+                    self.set_status("Run {}...".format(repr(job_name)))
+                    self.runningJob = self.jobPanels[job_name]
                     self.jobPanels[job_name].run_all(
                         destination,
                         event_template={'job_name': job_name},
@@ -352,9 +355,13 @@ class BackupNowFrame(ttk.Frame):  # type: ignore
                     # For Tkinter: self.root.after(0,
                     #     lambda: self.set_status(formatted_ex(ex)))
                     # For simplicity here, just catch and log/print
-                    print("Error in background run:", formatted_ex(ex))
+                    self.set_status("Error in background run: {}"
+                                    .format(formatted_ex(ex)))
                     # If you have a way to safely update UI from thread, use it
                     # Otherwise, you might need a queue or thread-safe callback
+                finally:
+                    pass
+                    # self.runningJob = None
 
             thread = threading.Thread(target=run_in_background, daemon=True)
             thread.start()
@@ -470,25 +477,77 @@ class BackupNowFrame(ttk.Frame):  # type: ignore
             self.tray_icon_main()
 
     def status_callback(self, event: dict) -> None:
+        print("[status_callback] event={}".format(event))
         self.events.put(event)
         self.root.after(0, self.process_events)
 
     def process_events(self):
         while True:
             try:
-                event = self.events.get()
+                # event = self.events.get()  # NOTE: hangs until non-empty!
+                event = self.events.get_nowait()
             except queue.Empty:
                 break
-            files_done = event.get('files_done')
-            files_total = event.get('files_total')
+            self.process_event(event)
+
+    def process_event(self, event):
+        print("[process_event] event={}".format(event))
+        files_done = event.get('files_done')
+        files_total = event.get('files_total')
+        if files_done or files_total:
             count_str = "{} / {}".format(files_done, files_total)
-            error = event.get('error')
-            if error:
-                self.set_status("{}".format(error))
-            elif event.get('done'):
-                self.set_status("Done ({})".format(count_str))
+        else:
+            count_str = ""
+        error = event.get('error')
+        message = event.get('message')
+        message = (message + " ") if message else message
+        state = "Done" if event.get('done') else "Copying"
+        ratio = event.get('ratio')
+        progressBar = None  # ttk.Progressbar
+        if self.runningJob:
+            progressBar = self.runningJob.widgets.get('progress')
+        if (ratio is not None) and (progressBar is not None):
+            percent = min(int(ratio * 100.0), 100)
+            # progressVar.set(percent)
+            progressBar['value'] = percent
+        if count_str:
+            message += count_str
+        if event.get('done'):
+            missing_source_folders = event.get('missing_source_folders')
+            missing_dst_folders = event.get('missing_dst_folders')
+            if missing_source_folders:
+                message += (" Not on connected: {}"
+                            .format(", ".join(missing_source_folders)))
+            if missing_dst_folders:
+                message += (" Not on backup drive: {}"
+                            .format(", ".join(missing_dst_folders)))
+        if error:
+            self.set_status("{} {}".format(error, message))
+        else:
+            self.set_status("{} ({})".format(state, message))
+        source_errors = event.get('source_errors')
+        for key, value in source_errors.items():
+            print("[process_event] [{}] = {}".format(key, value))
+        # for job_name, job in self.jobs.items():
+        if self.runningJob is None:
+            print("[process_event] No job is running.")
+            return
+        for idx, op_d in enumerate(self.runningJob.meta['operations']):
+            # event['source_errors']
+            source = op_d.get('source')
+            if not source:
+                source = idx
+            op_error = source_errors.get(source)
+            # op_info = self.runningJob.op_groups.get(idx)
+            if op_error:
+                print("[process_event] error for {}".format(repr(source)))
+                print("[process_event] [{}] op_error={}"
+                      .format(repr(idx), op_error))
+                self.runningJob.setOpMessage(idx, op_error)
+                # ^ key has to match one used for add_operation
             else:
-                self.set_status("Copying {}...".format(count_str))
+                print("[process_event] no error for {} = {}"
+                      .format(repr(source), op_d))
 
     def tray_icon_main(self):
         logger.info("Load tray icon...")

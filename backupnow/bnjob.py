@@ -52,6 +52,10 @@ class BNJob:
               'detect_destination_file' (allowed to be list) of
               the operation.
         """
+        def default_status_cb(d):
+            print("[_run_operation default_status_cb] {}".format(d))
+        if status_cb is None:
+            status_cb = default_status_cb
         detect_dst_file = operation.get('detect_destination_file')
         detect_dst_dir = operation.get('detect_destination_folder')
         source = operation.get('source')
@@ -166,4 +170,4 @@ class BNJob:
         results['done'] = True
         if status_cb is not None:
             status_cb(results)
-        return results  # return for synchronous use (rather than just status_cb)
+        return results  # return for synchronous use (not just status_cb)

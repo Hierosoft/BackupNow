@@ -30,6 +30,8 @@ logger = getLogger(__name__)
 #   (See basicConfig call in verbose case in main instead).
 del logging
 
+NOT_ON_DESTINATION = "Not on destination."
+
 
 class BackupNow:
     """Backend for BackupNow (manage operations & scheduling)
@@ -297,7 +299,7 @@ class BackupNow:
         if thread is not None:
             event = {
                 'error': "{} is already running.".format(job_name),
-                'status': "done",  # Since this instance is done
+                'done': True,  # Since this instance is done
             }
             return event
         thread = threading.Thread(
@@ -315,7 +317,7 @@ class BackupNow:
         logger.warning("[_run_job] job={}".format(job))
         time.sleep(1)  # FIXME: for debug only
         logger.warning("[_run_job] done {}".format(job_name))
-        event['status'] = "done"
+        event['done'] = True
         progress_cb(event)
         return event
 
@@ -361,7 +363,7 @@ class BackupNow:
         if thread is not None:
             event = {
                 'error': "{} is already running.".format(job_name),
-                'status': "done",  # Since this instance is done
+                'done': True,  # Since this instance is done
             }
             return event
         thread = threading.Thread(

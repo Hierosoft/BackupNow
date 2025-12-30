@@ -137,6 +137,10 @@ def sync_dir(src, dst, excludes=None,
             - 'files_total' (int)
             - 'ratio' (float)
     """
+    def default_status_cb(d):
+        print("[sync_dir default_status_cb] {}".format(d))
+    if status_cb is None:
+        status_cb = default_status_cb
     event = {} if event_template is None else event_template
     # ^ reference *NOT* copy in this case, for preserving
     #   counts during recursion.

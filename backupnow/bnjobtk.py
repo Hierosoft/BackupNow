@@ -1,10 +1,12 @@
+import copy
 import sys
 
 from collections import OrderedDict
 from logging import getLogger
-from typing import Dict, Literal, Mapping
+from typing import Callable, Dict, Literal, Mapping
 
 from backupnow import formatted_ex
+from backupnow.bncore import NOT_ON_DESTINATION
 from backupnow.bnjob import BNJob
 from backupnow.bnlogging import emit_cast
 
@@ -33,6 +35,15 @@ class OperationInfo:  # (tk.Frame):
         self.meta = None  # type: dict[str, str]
         self.widgets = {}  # type dict[str, tk.Widget]
 
+    def setField(self, key, value):
+        widget = self.widgets[key]
+        if isinstance(widget, (tk.Label, ttk.Label)):
+            widget['text'] = value
+        else:
+            NotImplementedError(
+                "Setting a(n) {} field value is not implemented"
+                .format(type(widget).__name__))
+
 
 class JobTk(BNJob):  # (ttk.Frame):
     """One Job which manages its operations.
@@ -54,6 +65,7 @@ class JobTk(BNJob):  # (ttk.Frame):
         'progress': 2,
         'ran': 3,
         'run': 4,
+        'message': 5,
     }
 
     def __init__(self, parent, parent_row, run_fn, show=True):
@@ -68,6 +80,7 @@ class JobTk(BNJob):  # (ttk.Frame):
         container.columnconfigure(2, weight=1)
         container.columnconfigure(3, weight=1)
         container.columnconfigure(4, weight=1)
+        container.columnconfigure(5, weight=0)
         self.name = None
         self.widgets = {}  # type: dict[str, ttk.Label|ttk.Checkbutton|ttk.Label|ttk.Progressbar|ttk.Combobox]
         # self.widgets['name'] = ttk.Label(container, anchor=tk.W)
@@ -87,10 +100,20 @@ class JobTk(BNJob):  # (ttk.Frame):
                                          state=tk.NORMAL,
                                          command=run_fn)
         self.widgets['progress'] = ttk.Progressbar(container)
+        self.widgets['message'] = ttk.Label(container)
         self.header_rows = 1
         if show:
             self.showHeader()
         self.op_groups = {}  # type: dict[int, OperationInfo]
+
+    def setOpMessage(self, key, message):
+        """Set message for a specific operation
+
+        Args:
+            key (Union[int,str]): Same key used for add_operation.
+            message (str): Any text.
+        """
+        self.op_groups[key].setField('message', message)
 
     def showHeader(self):
         self.widgets['enabled'].grid(column=self.columns['enabled'],
@@ -109,6 +132,10 @@ class JobTk(BNJob):  # (ttk.Frame):
             row=self.row,
             # sticky=tk.W,
         )
+        self.widgets['message'].grid(
+            column=self.columns['message'],
+            row=self.header_rows,
+        )
         self.row += self.header_rows
 
     def set_enabled(self, enabled):
@@ -124,18 +151,45 @@ class JobTk(BNJob):  # (ttk.Frame):
         return self.enabled_v.get()
 
     def run_all(self, destination, **kwargs):
+        """See _run_all."""
+        def default_status_cb(d):
+            print("[run_all default_status_cb] {}".format(d))
+        if 'status_cb' not in kwargs:
+            kwargs['status_cb'] = default_status_cb
         try:
             return self._run_all(destination, **kwargs)
         except Exception as ex:
-            if 'status_cb' in kwargs:
-                event = {
-                    'error': formatted_ex(ex)
-                }
-                kwargs['status_cb'](event)
+            kwargs['status_cb']({
+                'error': formatted_ex(ex),
+            })
             raise
 
     def _run_all(self, destination, require_subdirectory=True,
                  event_template=None, status_cb=None):
+        # type: (str, bool, dict, Callable) -> dict
+        """Run every operation in the job. See _run_operation
+        for args not listed here and other fields in dict sent to
+        status_cb.
+
+        Args:
+            status_cb (Callable): Callback function that accepts a
+            dictionary with keys such as:
+            - 'source_errors' (dict): Key is operations[i]['source']
+              string (or int index if job is missing a 'source'),
+              where operations[i] is each operation in the
+              'operations' key of this job's metadata.
+            - and keys in _run_operation documentation.
+        """
+        if event_template is None:
+            event = {'done': False}  # type: dict
+        else:
+            event = copy.deepcopy(event_template)  # type: dict
+
+        def default_status_cb(d):
+            print("[run_all default_status_cb] {}".format(d))
+        if status_cb is None:
+            status_cb = default_status_cb
+        # event['message'] = "Checking settings..."
         if self.meta.get('enabled') is False:
             raise RuntimeError("Tried to run job name={} but enabled is False."
                                .format(repr(self.name)))
@@ -150,11 +204,50 @@ class JobTk(BNJob):  # (ttk.Frame):
             raise TypeError(
                 "'operations' is an empty list in in job name={} but got {}"
                 .format(repr(self.name), emit_cast(self.meta['operations'])))
-        for operation in self.meta['operations']:
-            self._run_operation(operation, destination,
-                                event_template=event_template,
-                                require_subdirectory=require_subdirectory,
-                                status_cb=status_cb)  # See superclass
+        op_count = len(self.meta['operations'])
+        event['message'] = ("Running {} operation(s)...".format(op_count))
+        status_cb(event)
+        del event['message']
+        event['done'] = False
+        event['operations_total'] = op_count
+        event['source_errors'] = OrderedDict()
+        for idx, operation in enumerate(self.meta['operations']):
+            event.update({
+                # 'message': "Running operation {}/{}...".format(
+                #     idx+1, op_count),
+                'message': None,
+                'ratio': float(idx)/float(op_count),
+                'operations_done': idx,
+            })
+            print("[_run_all] {}".format(event['message']))
+            status_cb(event)
+            source = operation.get('source')
+            if not source:
+                source = idx
+            try:
+                if 'error' in event:
+                    del event['error']
+                op_results = self._run_operation(
+                    operation,
+                    destination,
+                    event_template=event,
+                    require_subdirectory=require_subdirectory,
+                    status_cb=status_cb,
+                )  # See superclass
+                op_error = op_results.get('error')
+                if op_error:
+                    event['source_errors'][source] = op_error
+                elif op_results['missing_dst_folders']:
+                    event['source_errors'][source] = NOT_ON_DESTINATION
+            except Exception as ex:
+                event['source_errors'][source] = formatted_ex(ex)
+        event.update({
+            'message': "operation {}/{}...".format(op_count, op_count),
+            'ratio': 1.0,
+            'done': True,
+        })
+        status_cb(event)
+        return event  # also return it, in case of synchronous operation
 
     def add_operation(self, key, operation, show=True):
         # type: (int, dict[str, str], bool) -> None
@@ -294,6 +387,10 @@ class JobTk(BNJob):  # (ttk.Frame):
         if 'ran' not in group.widgets:
             group.widgets['ran'] = ttk.Label(container, text=ran)
         group.widgets['ran'].grid(column=self.columns['ran'], row=self.row)
+        if 'message' not in group.widgets:
+            group.widgets['message'] = ttk.Label(container)
+        group.widgets['message'].grid(column=self.columns['message'],
+                                      row=self.row)
         self.row += 1
 
     def showOperations(self):
