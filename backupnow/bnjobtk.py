@@ -32,7 +32,8 @@ class OperationInfo:  # (tk.Frame):
             settings.
     """
     def __init__(self):
-        self.meta = None  # type: dict[str, str]
+        self.meta = None  # type: dict[str, str]|None
+        self.lastPercent = None  # type: int|None
         self.widgets = {}  # type dict[str, tk.Widget]
 
     def setField(self, key, value):
@@ -43,6 +44,17 @@ class OperationInfo:  # (tk.Frame):
             NotImplementedError(
                 "Setting a(n) {} field value is not implemented"
                 .format(type(widget).__name__))
+
+    def setProgressPercent(self, percent):
+        percent = min(percent, 100)
+        # if percent == self.lastPercent:
+        #     # skip if same
+        #     return
+        self.widgets['progress']['value'] = percent
+        self.lastPercent = percent
+
+    def setProgressRatio(self, ratio):
+        self.setProgressPercent(min(int(ratio * 100), 100))
 
 
 class JobTk(BNJob):  # (ttk.Frame):
@@ -68,19 +80,23 @@ class JobTk(BNJob):  # (ttk.Frame):
         'message': 5,
     }
 
-    def __init__(self, parent, parent_row, run_fn, show=True):
+    def __init__(self, parent, parent_row, run_fn, show=True,
+                 mounts=None):
+        BNJob.__init__(self, mounts=mounts)
         assert parent_row is not None
         self.row = parent_row
         self.first_row = self.row  # type: int
         container = parent  # self
         self.container = container
         # self.name_v = tk.StringVar(container)
-        container.columnconfigure(0, weight=0)  # 0: fixed size
+        container.columnconfigure(0, weight=0)  # 0: size to content
         container.columnconfigure(1, weight=3)
         container.columnconfigure(2, weight=1)
         container.columnconfigure(3, weight=1)
         container.columnconfigure(4, weight=1)
         container.columnconfigure(5, weight=0)
+        container.columnconfigure(self.columns['ran'], weight=0)
+        container.columnconfigure(self.columns['name'], weight=0)
         self.name = None
         self.widgets = {}  # type: dict[str, ttk.Label|ttk.Checkbutton|ttk.Label|ttk.Progressbar|ttk.Combobox]
         # self.widgets['name'] = ttk.Label(container, anchor=tk.W)
@@ -105,6 +121,15 @@ class JobTk(BNJob):  # (ttk.Frame):
         if show:
             self.showHeader()
         self.op_groups = {}  # type: dict[int, OperationInfo]
+
+    def getOp(self, idx):
+        return self.op_groups.get(idx)
+
+    def getOpLastPercent(self, op_idx):
+        operation = self.op_groups.get(op_idx)
+        if operation is not None:
+            return operation.lastPercent
+        return None
 
     def setOpMessage(self, key, message):
         """Set message for a specific operation
@@ -166,7 +191,7 @@ class JobTk(BNJob):  # (ttk.Frame):
 
     def _run_all(self, destination, require_subdirectory=True,
                  event_template=None, status_cb=None):
-        # type: (str, bool, dict, Callable) -> dict
+        # type: (str, bool, dict|None, Callable|None) -> dict
         """Run every operation in the job. See _run_operation
         for args not listed here and other fields in dict sent to
         status_cb.
@@ -211,6 +236,8 @@ class JobTk(BNJob):  # (ttk.Frame):
         event['done'] = False
         event['operations_total'] = op_count
         event['source_errors'] = OrderedDict()
+        # event_template = event
+        changed_settings = False
         for idx, operation in enumerate(self.meta['operations']):
             event.update({
                 # 'message': "Running operation {}/{}...".format(
@@ -227,6 +254,7 @@ class JobTk(BNJob):  # (ttk.Frame):
             try:
                 if 'error' in event:
                     del event['error']
+                event['operation_idx'] = idx
                 op_results = self._run_operation(
                     operation,
                     destination,
@@ -234,14 +262,23 @@ class JobTk(BNJob):  # (ttk.Frame):
                     require_subdirectory=require_subdirectory,
                     status_cb=status_cb,
                 )  # See superclass
+                # ^ May change operation['bytes_total'], see save below
+                if operation.get('bytes_total'):
+                    changed_settings = True
                 op_error = op_results.get('error')
                 if op_error:
                     event['source_errors'][source] = op_error
                 elif op_results['missing_dst_folders']:
                     event['source_errors'][source] = NOT_ON_DESTINATION
+                else:
+                    source_mount_path = op_results.get('source_mount_path')
+                    if source_mount_path:
+                        self.mounts[source] = source_mount_path
+                    # self.op_groups[idx].setProgressRatio(1.0)
             except Exception as ex:
                 event['source_errors'][source] = formatted_ex(ex)
         event.update({
+            'changed_settings': changed_settings,
             'message': "operation {}/{}...".format(op_count, op_count),
             'ratio': 1.0,
             'done': True,

@@ -16,16 +16,17 @@ def is_share_format(share):
     return bool(share_format_rc.match(share))
 
 
-def find_nth_rc(rc: re.Pattern, s: str, n: int = 1) -> int:
+def find_nth_rc(rc, s, n=1):
+    # type (re.Pattern, str, int|None) -> int
     """Starting index of nth match of the compiled regex in the string.
 
     Args:
-        rc: Compiled regular expression object (re.Pattern) to find.
-        s: String to search in.
-        n: Which occurrence to find (1-based index). Defaults to 1 (1st)
+        rc (re.Pattern): Compiled regular expression object (re.Pattern) to find.
+        s (str): String to search in.
+        n (int): Which occurrence to find (1-based index). Defaults to 1 (1st)
 
     Returns:
-        The starting index of the nth match, or -1 if fewer than n
+        int: The starting index of the nth match, or -1 if fewer than n
             matches exist.
 
     Raises:
@@ -73,9 +74,10 @@ def get_mounted_share(share, user=None, password=None):
             mount_path = letter + ":\\"
             if mount_path in used_drives:
                 continue
-            mount_share(letter + ":", share,
+            drive_path = letter + ":"
+            mount_share(drive_path, share,
                         user=user, password=password)
-            return
+            return drive_path
     return None
 
 
@@ -106,8 +108,8 @@ def mount_share(drive, share, user=None, password=None):
                 raise ValueError("{} () is not a network drive."
                                  .format(repr(drive),
                                          repr(os.path.realpath(drive))))
-            cmd = '[mount_share] net use {} /del /y'.format(drive)
-            print(cmd)
+            cmd = 'net use {} /del /y'.format(drive)
+            print("[mount_share] " + cmd)
             subprocess.call(cmd, shell=True)
             # ^ /y: auto-confirm (prevent hang on waiting to confirm)
 
@@ -115,7 +117,7 @@ def mount_share(drive, share, user=None, password=None):
             raise RuntimeError("Failed to unmap {}".format(drive))
 
         # Map the network drive
-        cmd = '[mount_share] net use {} {}'.format(drive, share)
+        cmd = 'net use {} {}'.format(drive, share)
         if (user is not None) and (password is not None):
             cmd += " /user:{} {}".format(user, password)
         print(cmd)

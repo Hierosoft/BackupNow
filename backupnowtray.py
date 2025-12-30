@@ -6,6 +6,7 @@ os.environ may not work correctly with setproctitle. See readme.md.
 from __future__ import print_function
 
 from collections import OrderedDict
+import copy
 import os
 import platform
 import queue
@@ -55,6 +56,7 @@ from backupnow import (
 
 from backupnow.bnjobtk import (
     JobTk,
+    OperationInfo,
 )
 
 from backupnow.bnscrollableframe import (
@@ -113,9 +115,9 @@ class BackupNowFrame(ttk.Frame):  # type: ignore
         # type: (tk.Tk) -> None
         ttk.Frame.__init__(self, root)
         self.runningJob = None  # type: JobTk
-        self.events = queue.SimpleQueue()
+        self.events = queue.SimpleQueue()  # type: queue.SimpleQueue
         self.jobs = OrderedDict()  # type: OrderedDict[str, JobTk]
-        self.root = root
+        self.root = root  # type: tk.Tk
         self.icon = None  # type: pystray.Icon
         root.after(0, self._on_form_loading)  # delay iconbitmap
         #  & widget creation until after hiding is complete.
@@ -455,6 +457,118 @@ class BackupNowFrame(ttk.Frame):  # type: ignore
         self.root = None
         moreps.remove_pid(BackupNowFrame.my_pid)
 
+    def process_events(self):
+        while True:
+            try:
+                # event = self.events.get()  # NOTE: hangs until non-empty!
+                event = self.events.get_nowait()
+            except queue.Empty:
+                break
+            self.process_event(event)
+
+    def process_event(self, event):
+        # print("[process_event] event={}".format(event))
+        files_done = event.get('files_done')
+        files_total = event.get('files_total')
+        last_files_total = event.get('last_files_total')
+        total_suffix = "+..."
+        if last_files_total is not None:
+            files_total = last_files_total  # The real total
+            total_suffix = ""
+        if files_done or files_total:
+            count_str = "{} / {}{}".format(files_done, files_total,
+                                           total_suffix)
+        else:
+            count_str = ""
+        error = event.get('error')
+        message = event.get('message')
+        message = (message + " ") if message else ""
+        state = "Done" if event.get('done') else "Copying"
+        ratio = event.get('ratio')
+        progressBar = None  # ttk.Progressbar
+        if self.runningJob:
+            progressBar = self.runningJob.widgets.get('progress')
+        if (ratio is not None) and (progressBar is not None):
+            percent = min(int(ratio * 100.0), 100)
+            # progressVar.set(percent)
+            try:
+                progressBar['value'] = percent
+            except tk.TclError:
+                # The progress bar is disposed already
+                #   (The user must have closed the tray icon,
+                #   destroying the shown/hidden window).
+                pass
+        if count_str:
+            message += count_str
+        current_file_rel_path = event.get('current_file_rel_path')
+
+        # FIXME: set_status makes window change size on each call if
+        #   larger than other rows!
+        # if current_file_rel_path:
+        #     message += " {}".format(repr(current_file_rel_path))
+
+        if event.get('done'):
+            missing_source_folders = event.get('missing_source_folders')
+            missing_dst_folders = event.get('missing_dst_folders')
+            if missing_source_folders:
+                message += (" Not on connected: {}"
+                            .format(", ".join(missing_source_folders)))
+            if missing_dst_folders:
+                message += (" Not on backup drive: {}"
+                            .format(", ".join(missing_dst_folders)))
+        if error:
+            self.set_status("{} {}".format(error, message))
+        else:
+            self.set_status("{} ({})".format(state, message))
+        source_errors = event.get('source_errors')
+        # for key, value in source_errors.items():
+        #     print("[process_event] [{}] = {}".format(key, value))
+        # for job_name, job in self.jobs.items():
+        if self.runningJob is None:
+            print("[process_event] No job is running.")
+            return
+        # for idx, op_d in enumerate(self.runningJob.meta['operations']):
+        if 'operation_idx' in event:
+            idx = event['operation_idx']
+            op_d = self.runningJob.meta['operations'][idx]  # type: dict
+            # event['source_errors']
+            source = op_d.get('source')
+            if not source:
+                source = idx
+            op_error = source_errors.get(source)
+            operation = self.runningJob.op_groups.get(idx)  # type: OperationInfo|None  # noqa:E501
+            if op_error:
+                # print("[process_event] error for {}".format(repr(source)))
+                # print("[process_event] [{}] op_error={}"
+                #       .format(repr(idx), op_error))
+                self.runningJob.setOpMessage(idx, op_error)
+                # ^ key has to match one used for add_operation
+            # print("bytes_done={} last_bytes_total={}"
+            #       .format(event.get('bytes_done'),
+            #               event.get('last_bytes_total')))
+            if ('bytes_done' in event) and event.get('last_bytes_total'):
+                # Use integer floor division for speed and to reduce
+                #   floating point errors with large numbers.
+                chunk_size = event['last_bytes_total'] // 100
+                percent = event['bytes_done'] // chunk_size
+                if operation is not None:
+                    try:
+                        operation.setProgressPercent(percent)
+                    except tk.TclError:
+                        # The window is disposed (tray icon quit)
+                        pass
+        if event.get('save_operation_values'):
+            for key in event['save_operation_values']:
+                idx = event['operation_idx']
+                self.runningJob.meta['operations'][idx][key] = event[key]
+                print("Set self.runningJob.meta['operations'][{}]={}"
+                      .format(idx, self.runningJob.meta['operations'][idx]))
+            self.core.save()
+            del event['save_operation_values']
+        if event.get('changed_settings'):
+            self.core.save()
+            del event['changed_settings']
+
     def quit(self):
         """Quit instead of minimizing to tray.
         If the OS does not support tray icon menus, this is called
@@ -476,78 +590,15 @@ class BackupNowFrame(ttk.Frame):  # type: ignore
         if not self.icon:
             self.tray_icon_main()
 
-    def status_callback(self, event: dict) -> None:
-        print("[status_callback] event={}".format(event))
+    def status_callback(self, event):
+        # type: (dict) -> None
+        # print("[status_callback] event={}".format(event))
+        if 'save_operation_values' in event:
+            original_event = event
+            event = copy.deepcopy(original_event)
+            del original_event['save_operation_values']
         self.events.put(event)
         self.root.after(0, self.process_events)
-
-    def process_events(self):
-        while True:
-            try:
-                # event = self.events.get()  # NOTE: hangs until non-empty!
-                event = self.events.get_nowait()
-            except queue.Empty:
-                break
-            self.process_event(event)
-
-    def process_event(self, event):
-        print("[process_event] event={}".format(event))
-        files_done = event.get('files_done')
-        files_total = event.get('files_total')
-        if files_done or files_total:
-            count_str = "{} / {}".format(files_done, files_total)
-        else:
-            count_str = ""
-        error = event.get('error')
-        message = event.get('message')
-        message = (message + " ") if message else message
-        state = "Done" if event.get('done') else "Copying"
-        ratio = event.get('ratio')
-        progressBar = None  # ttk.Progressbar
-        if self.runningJob:
-            progressBar = self.runningJob.widgets.get('progress')
-        if (ratio is not None) and (progressBar is not None):
-            percent = min(int(ratio * 100.0), 100)
-            # progressVar.set(percent)
-            progressBar['value'] = percent
-        if count_str:
-            message += count_str
-        if event.get('done'):
-            missing_source_folders = event.get('missing_source_folders')
-            missing_dst_folders = event.get('missing_dst_folders')
-            if missing_source_folders:
-                message += (" Not on connected: {}"
-                            .format(", ".join(missing_source_folders)))
-            if missing_dst_folders:
-                message += (" Not on backup drive: {}"
-                            .format(", ".join(missing_dst_folders)))
-        if error:
-            self.set_status("{} {}".format(error, message))
-        else:
-            self.set_status("{} ({})".format(state, message))
-        source_errors = event.get('source_errors')
-        for key, value in source_errors.items():
-            print("[process_event] [{}] = {}".format(key, value))
-        # for job_name, job in self.jobs.items():
-        if self.runningJob is None:
-            print("[process_event] No job is running.")
-            return
-        for idx, op_d in enumerate(self.runningJob.meta['operations']):
-            # event['source_errors']
-            source = op_d.get('source')
-            if not source:
-                source = idx
-            op_error = source_errors.get(source)
-            # op_info = self.runningJob.op_groups.get(idx)
-            if op_error:
-                print("[process_event] error for {}".format(repr(source)))
-                print("[process_event] [{}] op_error={}"
-                      .format(repr(idx), op_error))
-                self.runningJob.setOpMessage(idx, op_error)
-                # ^ key has to match one used for add_operation
-            else:
-                print("[process_event] no error for {} = {}"
-                      .format(repr(source), op_d))
 
     def tray_icon_main(self):
         logger.info("Load tray icon...")

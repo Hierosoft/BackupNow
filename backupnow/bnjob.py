@@ -1,5 +1,9 @@
+from collections import OrderedDict
 import copy
 import os
+import platform
+import subprocess
+import time
 
 from backupnow.bnlogging import emit_cast
 from backupnow import sync_dir
@@ -7,6 +11,11 @@ from backupnow.moresmb import get_mounted_share, split_share
 
 
 class BNJob:
+    def __init__(self, mounts=None):
+        if mounts is None:
+            mounts = OrderedDict()
+        self.mounts = mounts
+
     def _run_operation(self, operation, destination,
                        require_subdirectory=True,
                        event_template=None,
@@ -132,6 +141,8 @@ class BNJob:
             if not src_mount_path:
                 raise OSError("Failed to mount {}".format(share))
             src_path = os.path.join(src_mount_path, src_sub)
+            # time.sleep(2)  # Wait for mount to take effect
+            results['source_mount_path'] = src_path
         else:
             src_path = source
         detect_source_folder = operation.get('detect_source_folder')
@@ -150,7 +161,8 @@ class BNJob:
                 if not isinstance(
                     detect_source_folder, list) else detect_source_folder
             for detect_source_folder in results['detect_source_folders']:
-                if not os.path.isdir(detect_source_folder):
+                if not os.path.isdir(os.path.join(src_path,
+                                                  detect_source_folder)):
                     results['missing_source_folders'].append(
                         detect_source_folder)
             if results['missing_source_folders']:
@@ -161,13 +173,26 @@ class BNJob:
                 return results
 
         results['valid_source'] = True
-        sync_dir(
+        if 'last_bytes_total' in operation:
+            results['last_bytes_total'] = operation['last_bytes_total']
+        results = sync_dir(
             src_path,
             dst_path,
             event_template=results,
             status_cb=status_cb,
         )  # excludes=None, exclude_res=None)
+        if results.get('bytes_total'):
+            operation['last_bytes_total'] = results['bytes_total']
         results['done'] = True
         if status_cb is not None:
             status_cb(results)
+        if 'source_mount_path' in results:
+            if platform.system() == "Windows":
+                cmd = ('net use {} /del /y'.format(
+                    results['source_mount_path'].rstrip(os.path.sep)))
+                print("[mount_share] " + cmd)
+                subprocess.call(cmd, shell=True)
+            else:
+                NotImplementedError("Unmount is not implemented for {}"
+                                    .format(platform.system()))
         return results  # return for synchronous use (not just status_cb)

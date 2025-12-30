@@ -10,9 +10,11 @@ checked.
 '''
 from __future__ import print_function
 
+import copy
 import logging
 import os
 import re
+import shutil
 import sys
 
 from datetime import datetime
@@ -74,6 +76,26 @@ def formatted_ex(ex):
     return "{}: {}".format(type(ex).__name__, ex)
 
 
+def get_size(start_path, event_template=None, status_cb=None):
+    # based on <https://stackoverflow.com/a/1392549>
+    total_size = 0
+    event = {} if (event_template is None) else copy.deepcopy(event_template)
+    num = 0
+    for dirpath, dirnames, filenames in os.walk(start_path):
+        for f in filenames:
+            num += 1
+            fp = os.path.join(dirpath, f)
+            # skip if it is symbolic link
+            if status_cb:
+                event['message'] = ("Calculating size of {} file(s) in {}"
+                                    .format(num, repr(start_path)))
+                status_cb(event)
+            if not os.path.islink(fp):
+                total_size += os.path.getsize(fp)
+
+    return total_size
+
+
 def getRelPath(root, sub_path):
     if not sub_path.startswith(root):
         raise RuntimeError(
@@ -115,11 +137,15 @@ def getRelPaths(path, sort=True, root=None):
 
 def sync_dir(src, dst, excludes=None,
              event_template=None,
-             status_cb=None, rel=None):
+             status_cb=None, rel=None,
+             dry_run=False, depth=0,
+             quiet=True):
     """Copy each file in source where there isn't a matching destination.
 
     Args:
         src (str): source path
+        depth (int): Leave this as the default (directory tree depth,
+            computed during recursion). Defaults to 0.
         dst (str): destination path
         excludes (Union[str,re.Pattern], optional): paths or regex
             patterns (checked against path relative to src) to exclude.
@@ -141,9 +167,11 @@ def sync_dir(src, dst, excludes=None,
         print("[sync_dir default_status_cb] {}".format(d))
     if status_cb is None:
         status_cb = default_status_cb
+
     event = {} if event_template is None else event_template
-    # ^ reference *NOT* copy in this case, for preserving
+    # ^ reference *NOT copy* in this case, for preserving
     #   counts during recursion.
+
     if excludes is not None:
         if isinstance(excludes, list):
             for exclude in excludes:
@@ -156,6 +184,21 @@ def sync_dir(src, dst, excludes=None,
         event['files_done'] = 0
     if 'files_total' not in event:
         event['files_total'] = 0
+    if 'bytes_done' not in event:
+        event['bytes_done'] = 0
+    if 'bytes_total' not in event:
+        event['bytes_total'] = 0
+    if 'last_bytes_total' not in event:
+        assert depth == 0, "last_bytes_total was not calculated at top level."
+        event['last_bytes_total'] = get_size(
+            src,
+            event_template=event,
+            status_cb=status_cb,
+        )
+        # ^ saved at end of last job. See operation['last_bytes_total']
+        event['save_operation_values'] = ['last_bytes_total']
+        status_cb(event)
+        del event['save_operation_values']
 
     for sub in os.listdir(src):
         src_sub_path = os.path.join(src, sub)
@@ -173,10 +216,9 @@ def sync_dir(src, dst, excludes=None,
             event['files_total'] += 1
             event['bytes_total'] += os.path.getsize(src_sub_path)
 
-    print("rsync -a {}/ {}  # excludes={} rel={}"
-          .format(repr(src), repr(dst), repr(excludes), repr(rel)))
-    return # for debug only
-
+    # print("rsync -a {}/ {}  # excludes={} rel={}"
+    #       .format(repr(src), repr(dst), repr(excludes), repr(rel)))
+    made_dst = False
     for sub in src_subs:
         src_sub_path = os.path.join(src, sub)
         dst_sub_path = os.path.join(dst, sub)
@@ -184,7 +226,11 @@ def sync_dir(src, dst, excludes=None,
         # if os.path.islink(src_sub_path):
         if os.path.islink(src_sub_path):
             # Copy even if dangling
-            shutil.copy2(src_sub_path, dst_sub_path)
+            if not quiet:
+                print("ln -s `readlink {}` {}".format(repr(src_sub_path),
+                                                      repr(dst_sub_path)))
+            if not dry_run:
+                shutil.copy2(src_sub_path, dst_sub_path)
             continue
         if os.path.isdir(src_sub_path):
             sync_dir(
@@ -192,7 +238,11 @@ def sync_dir(src, dst, excludes=None,
                 dst_sub_path,
                 excludes=excludes,
                 event_template=event,
+                status_cb=status_cb,
                 rel=sub_rel,
+                depth=depth+1,
+                dry_run=dry_run,
+                quiet=quiet,
             )
             continue
         elif os.path.isfile(src_sub_path):
@@ -205,9 +255,26 @@ def sync_dir(src, dst, excludes=None,
                         same = True
             if not same:
                 if not os.path.isdir(dst):
-                    os.makedirs(dst)
-                shutil.copy2(src_sub_path, dst_sub_path)
-        event['files_done'] += 1
-        event['bytes_done'] += os.path.getsize(src_sub_path)
-        if status_cb is not None:
-            status_cb(event)
+                    if not dry_run:
+                        os.makedirs(dst)
+                    if not made_dst:
+                        if not quiet:
+                            print("mkdir -p {}".format(repr(dst)))
+                        made_dst = True
+                if not dry_run:
+                    shutil.copy2(src_sub_path, dst_sub_path)
+                if not quiet:
+                    print("cp -a {} {}".format(repr(src_sub_path),
+                                               repr(dst_sub_path)))
+            event['files_done'] += 1
+            event['bytes_done'] += os.path.getsize(src_sub_path)
+            event['current_file_rel_path'] = src_sub_path
+            if status_cb is not None:
+                status_cb(event)
+    if depth == 0:
+        event['last_files_total'] = event['files_total']
+        event['save_operation_values'] = ['last_files_total']
+        status_cb(event)
+        del event['save_operation_values']
+
+    return event

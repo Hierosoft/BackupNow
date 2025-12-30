@@ -3,6 +3,7 @@ import json
 import os
 
 from logging import getLogger
+import shutil
 
 logger = getLogger(__name__)
 
@@ -37,5 +38,16 @@ class Settings(dict):
             self.path = path
         if not self.path:
             raise ValueError("The path for Settings must be set for save.")
-        with open(self.path, 'w') as stream:
+        tmp_path = self.path + ".tmp"
+        with open(tmp_path, 'w') as stream:
             json.dump(self, stream, sort_keys=True, indent=2)
+        moved_path = None
+        if os.path.isfile(self.path):
+            moved_path = self.path + ".old"
+            shutil.move(self.path, moved_path)
+            # ^ Move it before deleting it, in case only file not dir is
+            #   writeable (which would cause move(tmp_path, self.path)
+            #   to fail).
+        shutil.move(tmp_path, self.path)
+        if moved_path:
+            os.remove(moved_path)
