@@ -150,8 +150,12 @@ class BackupNowFrame(ttk.Frame):  # type: ignore
         self._add_log_container(self.log_panel)
 
         self.status_v = tk.StringVar(self.root)
-        self.status_label = ttk.Label(self.root, state="readonly",
-                                      textvariable=self.status_v)
+        self.status_label = ttk.Entry(
+            self.root, state="readonly", textvariable=self.status_v)
+        # NOTE: Use Entry for status_label since label makes set_status
+        #   change size on each call if larger than original window
+        #   (Such as when showing current_file_rel_path in
+        #   process_event)
         outer_row += 1
 
         self.destinationPanel = ttk.Frame(root)
@@ -502,10 +506,8 @@ class BackupNowFrame(ttk.Frame):  # type: ignore
             message += count_str
         current_file_rel_path = event.get('current_file_rel_path')
 
-        # FIXME: set_status makes window change size on each call if
-        #   larger than other rows!
-        # if current_file_rel_path:
-        #     message += " {}".format(repr(current_file_rel_path))
+        if current_file_rel_path:
+            message += " {}".format(repr(current_file_rel_path))
 
         if event.get('done'):
             missing_source_folders = event.get('missing_source_folders')
