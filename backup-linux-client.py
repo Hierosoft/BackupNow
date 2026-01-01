@@ -57,14 +57,14 @@ def copy_preserve(src, dst):
         link_dst = os.readlink(src)
         os.symlink(link_dst, dst)
     else:
-        shutil.copy(src, dst)
+        shutil.copy2(src, dst)
 
 
 def copy_preserve_cmd(src, dst):
     if os.path.islink(src):
         target = os.readlink(src)
         return 'ln -s "%s" "%s"' % (target, dst)
-    return 'cp "%s" "%s"' % (src, dst)
+    return 'cp -a "%s" "%s"' % (src, dst)
 
 
 def append_to_file(script_path, line):
