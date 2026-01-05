@@ -1,3 +1,4 @@
 pillow
 psutil
 pystray
+pywin32
