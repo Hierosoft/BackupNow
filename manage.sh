@@ -41,7 +41,7 @@ if [ "@$HOSTNAME" = "@linuxtower" ]; then
             if [ $code -ne 0 ]; then
                 customExit "Installing preinstall-linuxtower-maria failed." $code
             fi
-            rsync -rt ~/git/preinstall-linuxtower-maria/always_add/home/maria/Projects/BackupNow/ /home/maria/Projects/BackupNow
+            rsync -rt ~/git/preinstall-linuxtower-maria/always_add/home/maria/Projects/ /home/maria/Projects
             if [ $code -ne 0 ]; then
                 customExit "Installing BackupNow failed." $code
             fi
@@ -59,7 +59,7 @@ if [ "@$HOSTNAME" = "@linuxtower" ]; then
             fi
             echo "* updating preinstall-linuxtower-maria..."
             git pull
-            rsync -rt ~/git/preinstall-linuxtower-maria/always_add/home/maria/Projects/BackupNow/ /home/maria/Projects/BackupNow
+            rsync -rt ~/git/preinstall-linuxtower-maria/always_add/home/maria/Projects/ /home/maria/Projects
             # ^ The shell version of BackupNow is a temporary solution and is not in the BackupNow repo
             #   (It is in the preinstall-linuxtower-maria repo).
             if [ $code -ne 0 ]; then
